@@ -102,12 +102,14 @@ export class DeviceManager {
 
     public init (canvas: HTMLCanvasElement | null, bindingMappingInfo: BindingMappingInfo) {
         // Avoid setup to be called twice.
+        // console.time('gfx 1');
         if (this.initialized) { return; }
         const renderMode = settings.querySettings(Settings.Category.RENDERING, 'renderMode');
         this._canvas = canvas;
 
         this._renderType = this._determineRenderType(renderMode);
-
+        // console.timeEnd('gfx 1');
+        console.time('phase gfx 2');
         // WebGL context created successfully
         if (this._renderType === RenderType.WEBGL) {
             const deviceInfo = new DeviceInfo(bindingMappingInfo);
@@ -148,7 +150,8 @@ export class DeviceManager {
             this._gfxDevice.initialize(new DeviceInfo(bindingMappingInfo));
             this._initSwapchain();
         }
-
+        console.timeEnd('phase gfx 2');
+        console.time('phase gfx 3');
         if (!this._gfxDevice) {
             // todo fix here for wechat game
             error('can not support canvas rendering in 3D');
@@ -165,6 +168,8 @@ export class DeviceManager {
         swapchainInfo.width = windowSize.width;
         swapchainInfo.height = windowSize.height;
         this._swapchain = this._gfxDevice.createSwapchain(swapchainInfo);
+        if (this._canvas) { this._canvas.oncontextmenu = () => false; }
+        console.timeEnd('phase gfx 3');
     }
 
     private _determineRenderType (renderMode: LegacyRenderMode): RenderType {

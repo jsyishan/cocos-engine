@@ -171,13 +171,13 @@ export class WebGL2Device extends Device {
         this._caps.max3DTextureSize = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
         this._caps.uboOffsetAlignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT);
 
-        const extensions = gl.getSupportedExtensions();
-        let extStr = '';
-        if (extensions) {
-            for (const ext of extensions) {
-                extStr += `${ext} `;
-            }
-        }
+        // const extensions = gl.getSupportedExtensions();
+        // let extStr = '';
+        // if (extensions) {
+        //     for (const ext of extensions) {
+        //         extStr += `${ext} `;
+        //     }
+        // }
 
         const exts = getExtensions(gl);
 
@@ -227,7 +227,7 @@ export class WebGL2Device extends Device {
         debug(`VENDOR: ${this._vendor}`);
         debug(`VERSION: ${version}`);
         debug(`COMPRESSED_FORMAT: ${compressedFormat}`);
-        debug(`EXTENSIONS: ${extStr}`);
+        // debug(`EXTENSIONS: ${extStr}`);
 
         return true;
     }

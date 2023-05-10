@@ -63,6 +63,9 @@ class ScreenAdapter extends EventTarget {
     }
 
     public get devicePixelRatio () {
+        if (this._overrideDpr !== -1) {
+            return this._overrideDpr;
+        }
         const sysInfo = minigame.getSystemInfoSync();
         return sysInfo.pixelRatio;
     }
@@ -72,7 +75,8 @@ class ScreenAdapter extends EventTarget {
         const dpr = this.devicePixelRatio;
         let screenWidth = sysInfo.windowWidth;
         let screenHeight = sysInfo.windowHeight;
-        if (BYTEDANCE) {
+        if (BYTEDANCE || WECHAT) {
+            // TODO The screen size is full screen, the window size does not include the bangs screen
             screenWidth = sysInfo.screenWidth;
             screenHeight = sysInfo.screenHeight;
         }
@@ -149,6 +153,7 @@ class ScreenAdapter extends EventTarget {
     private _cbToUpdateFrameBuffer?: () => void;
     private _resolutionScale = 1;
     private _isProportionalToFrame = false;
+    private _overrideDpr = -1;
 
     constructor () {
         super();
@@ -163,6 +168,7 @@ class ScreenAdapter extends EventTarget {
     public init (options: IScreenOptions, cbToRebuildFrameBuffer: () => void) {
         this._cbToUpdateFrameBuffer = cbToRebuildFrameBuffer;
         this._cbToUpdateFrameBuffer();
+        this._overrideDpr = options.overrideDpr ?? -1;
     }
 
     public requestFullScreen (): Promise<void> {

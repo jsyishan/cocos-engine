@@ -31,11 +31,12 @@ import { ConfigOrientation } from 'pal/screen-adapter';
 import assetManager, { IAssetManagerOptions } from '../asset/asset-manager/asset-manager';
 import { EventTarget, AsyncDelegate, sys, macro, VERSION, cclegacy, screen, Settings, settings, assert, garbageCollectionManager, DebugMode, warn, log, _resetDebugSetting } from '../core';
 import { input } from '../input';
-import { deviceManager, LegacyRenderMode } from '../gfx';
-import { SplashScreen } from './splash-screen';
+
+// import { SplashScreen } from './splash-screen';
 import { RenderPipeline } from '../rendering';
 import { Layers, Node } from '../scene-graph';
 import { builtinResMgr } from '../asset/asset-manager/builtin-res-mgr';
+import { deviceManager, LegacyRenderMode } from '../gfx';
 import { Director, director } from './director';
 import { bindingMappingInfo } from '../rendering/define';
 import { ICustomJointTextureLayout } from '../3d/skeletal-animation/skeletal-animation-utils';
@@ -612,7 +613,7 @@ export class Game extends EventTarget {
             this.pause();
             this.resume();
             this._shouldLoadLaunchScene = true;
-            SplashScreen.instance.curTime = 0;
+            // SplashScreen.instance.curTime = 0;
             this._safeEmit(Game.EVENT_RESTART);
         });
     }
@@ -704,15 +705,20 @@ export class Game extends EventTarget {
      * @param config - Pass configuration object
      */
     public init (config: IGameConfig) {
+        // console.time('1');
         this._compatibleWithOldParams(config);
+        // console.timeEnd('1');
         // DONT change the order unless you know what's you doing
         return Promise.resolve()
             // #region Base
             .then(() => {
+                // console.time('2');
                 this.emit(Game.EVENT_PRE_BASE_INIT);
                 return this.onPreBaseInitDelegate.dispatch();
             })
             .then(() => {
+                // console.timeEnd('2');
+                // console.time('3');
                 if (DEBUG) {
                     console.time('Init Base');
                 }
@@ -723,8 +729,13 @@ export class Game extends EventTarget {
             .then(() => {
                 this._initEvents();
             })
-            .then(() => settings.init(config.settingsPath, config.overrideSettings))
             .then(() => {
+                console.time('phase 4'); // 17ms
+                return settings.init(config.settingsPath, config.overrideSettings);
+            })
+            .then(() => {
+                console.timeEnd('phase 4');
+                // console.time('4.5');
                 if (DEBUG) {
                     console.timeEnd('Init Base');
                 }
@@ -734,14 +745,21 @@ export class Game extends EventTarget {
             // #endregion Base
             // #region Infrastructure
             .then(() => {
+                // console.timeEnd('4.5');
+                // console.time('5');
                 this.emit(Game.EVENT_PRE_INFRASTRUCTURE_INIT);
                 return this.onPreInfrastructureInitDelegate.dispatch();
             })
             .then(() => {
+                // console.timeEnd('5');
+                console.time('phase 6'); // 19ms
                 if (DEBUG) {
                     console.time('Init Infrastructure');
                 }
+                // console.time('6.1');
                 macro.init();
+                // console.timeEnd('6.1');
+                // console.time('6.2');
                 this._initXR();
                 const adapter = findCanvas();
                 if (adapter) {
@@ -749,27 +767,61 @@ export class Game extends EventTarget {
                     this.frame = adapter.frame;
                     this.container = adapter.container;
                 }
+                // console.timeEnd('6.2');
+                // console.time('6.3');
                 screen.init();
+                // console.timeEnd('6.3');
+                // console.time('6.4');
                 garbageCollectionManager.init();
+                // console.timeEnd('6.4');
+                console.time('phase 6.5'); // 6ms
+
+                // resize canvas before deviceManager init
+                console.time('phase resize canvas');
+                const locCanvas = this.canvas;
+                if (locCanvas) {
+                    const windowSize = screen.windowSize;
+                    if (locCanvas.width !== windowSize.width) {
+                        locCanvas.width = windowSize.width;
+                    }
+                    if (locCanvas.height !== windowSize.height) {
+                        locCanvas.height = windowSize.height;
+                    }
+                }
+                console.timeEnd('phase resize canvas');
+
                 deviceManager.init(this.canvas, bindingMappingInfo);
                 if (macro.CUSTOM_PIPELINE_NAME === '') {
                     cclegacy.rendering = undefined;
                 }
+                console.timeEnd('phase 6.5');
+                // console.time('6.6');
                 assetManager.init();
+                // console.timeEnd('6.6');
+                console.time('phase 6.7'); // 12ms -> 2ms
                 builtinResMgr.init();
+                console.timeEnd('phase 6.7');
+                // console.time('6.8');
                 Layers.init();
+                // console.timeEnd('6.8');
+                // console.time('6.9');
                 this.initPacer();
+                // console.timeEnd('6.9');
                 if (DEBUG) {
                     console.timeEnd('Init Infrastructure');
                 }
             })
             .then(() => {
+                console.timeEnd('phase 6');
+                // console.time('7');
                 this.emit(Game.EVENT_POST_INFRASTRUCTURE_INIT);
                 return this.onPostInfrastructureInitDelegate.dispatch();
             })
             // #endregion Infrastructure
             // #region Subsystem
             .then(() => {
+                // console.timeEnd('7');
+                // console.time('8');
                 this.emit(Game.EVENT_PRE_SUBSYSTEM_INIT);
                 return this.onPreSubsystemInitDelegate.dispatch();
             })
@@ -792,13 +844,20 @@ export class Game extends EventTarget {
                 cclegacy.rendering.init(deviceManager.gfxDevice, data);
             })
             .then(() => {
+                // console.timeEnd('8');
+                console.time('phase 9');
                 if (DEBUG) {
                     console.time('Init SubSystem');
                 }
+                console.time('phase 9.1');
                 director.init();
+                console.timeEnd('phase 9.1');
+                console.time('phase 9.2'); // 41ms
                 return builtinResMgr.loadBuiltinAssets();
             })
             .then(() => {
+                console.timeEnd('phase 9');
+                // console.time('10');
                 if (DEBUG) {
                     console.timeEnd('Init SubSystem');
                 }
@@ -806,6 +865,8 @@ export class Game extends EventTarget {
                 return this.onPostSubsystemInitDelegate.dispatch();
             })
             .then(() => {
+                // console.timeEnd('10');
+                // console.time('11');
                 console.log(`Cocos Creator v${VERSION}`);
                 this.emit(Game.EVENT_ENGINE_INITED);
                 this._engineInited = true;
@@ -813,10 +874,14 @@ export class Game extends EventTarget {
             // #endregion Subsystem
             // #region Project
             .then(() => {
+                // console.timeEnd('11');
+                // console.time('12');
                 this.emit(Game.EVENT_PRE_PROJECT_INIT);
                 return this.onPreProjectInitDelegate.dispatch();
             })
             .then(() => {
+                // console.timeEnd('12');
+                // console.time('13');
                 if (DEBUG) {
                     console.time('Init Project');
                 }
@@ -830,21 +895,44 @@ export class Game extends EventTarget {
                 return promise;
             })
             .then(() => {
+                // console.timeEnd('13');
+                console.time('phase 14'); // 32ms
+                console.time('phase 14.1');
                 const scriptPackages = settings.querySettings<string[]>(Settings.Category.SCRIPTING, 'scriptPackages');
                 if (scriptPackages) {
                     return Promise.all(scriptPackages.map((pack) => import(pack)));
                 }
                 return Promise.resolve([]);
             })
-            .then(() => this._loadProjectBundles())
-            .then(() => this._loadCCEScripts())
-            .then(() => this._setupRenderPipeline())
-            .then(() => this._loadPreloadAssets())
             .then(() => {
-                builtinResMgr.compileBuiltinMaterial();
-                return SplashScreen.instance.init();
+                console.timeEnd('phase 14.1');
+                console.time('phase 14.2'); // 29ms
+                return this._loadProjectBundles();
             })
             .then(() => {
+                console.timeEnd('phase 14.2');
+                // console.time('14.3');
+                return this._loadCCEScripts();
+            })
+            .then(() => {
+                // console.timeEnd('14.3');
+                console.time('phase 14.4'); //3ms
+                return this._setupRenderPipeline();
+            })
+            .then(() => {
+                console.timeEnd('phase 14.4');
+                // console.time('14.5');
+                return this._loadPreloadAssets();
+            })
+            // .then(() => {
+            //     builtinResMgr.compileBuiltinMaterial();
+            //     return SplashScreen.instance.init();
+            // })
+            .then(() => {
+                // console.timeEnd('14.5');
+                console.timeEnd('phase 14');
+                // console.time('15'); // 1ms
+                builtinResMgr.compileBuiltinMaterial();
                 if (DEBUG) {
                     console.timeEnd('Init Project');
                 }
@@ -853,8 +941,11 @@ export class Game extends EventTarget {
             })
             // #endregion Project
             .then(() => {
+                // console.timeEnd('15');
+                // console.time('16');
                 this._inited = true;
                 this._safeEmit(Game.EVENT_GAME_INITED);
+                // console.timeEnd('16');
             });
     }
 
@@ -949,9 +1040,14 @@ export class Game extends EventTarget {
      * @internal only for game-view
      */
     public _loadProjectBundles () {
+        // console.time('14.2.1');
         const preloadBundles = settings.querySettings<{ bundle: string, version: string }[]>(Settings.Category.ASSETS, 'preloadBundles');
         if (!preloadBundles) return Promise.resolve([]);
+        // console.timeEnd('14.2.1');
+        // console.time('14.2.2');
         return Promise.all(preloadBundles.map(({ bundle, version }) => new Promise<void>((resolve, reject) => {
+            // console.timeEnd('14.2.2');
+            console.time('phase 14.2.3');
             const opts: Record<string, any> = {};
             if (version) opts.version = version;
             assetManager.loadBundle(bundle, opts, (err) => {
@@ -959,6 +1055,7 @@ export class Game extends EventTarget {
                     reject(err);
                     return;
                 }
+                console.timeEnd('phase 14.2.3');
                 resolve();
             });
         })));
@@ -1000,9 +1097,7 @@ export class Game extends EventTarget {
 
     private _updateCallback () {
         if (!this._inited) return;
-        if (!SplashScreen.instance.isFinished) {
-            SplashScreen.instance.update(this._calculateDT(false));
-        } else if (this._shouldLoadLaunchScene) {
+        if (this._shouldLoadLaunchScene) {
             this._shouldLoadLaunchScene = false;
             const launchScene = settings.querySettings(Settings.Category.LAUNCH, 'launchScene');
             if (launchScene) {
@@ -1010,6 +1105,7 @@ export class Game extends EventTarget {
                 director.loadScene(launchScene, () => {
                     console.log(`Success to load scene: ${launchScene}`);
                     this._initTime = performance.now();
+                    this._startTime = performance.now();
                     director.startAnimation();
                     this.onStart?.();
                 });

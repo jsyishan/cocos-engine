@@ -22,9 +22,10 @@
  THE SOFTWARE.
 */
 
-import { CCFloat, CCInteger, _decorator, Vec3 } from '../../core';
+import { CCFloat, CCInteger, _decorator, Vec3, Mat4 } from '../../core';
 import { ParticleNoise } from '../noise';
 import { Particle, PARTICLE_MODULE_NAME, ParticleModuleBase } from '../particle';
+import { ParticleSystem } from '../particle-system';
 
 const { ccclass, serializable, displayOrder, type, range, slide, visible } = _decorator;
 
@@ -286,6 +287,20 @@ export class NoiseModule extends ParticleModuleBase {
 
     private samplePosition: Vec3 = new Vec3();
 
+    constructor () {
+        super();
+        this.needUpdate = true;
+    }
+
+    public update (ps: ParticleSystem, space: number, worldTransform: Mat4) {
+        this.noise.setTime(ps.time);
+        this.noise.setSpeed(this.noiseSpeedX, this.noiseSpeedY, this.noiseSpeedZ);
+        this.noise.setFrequency(this.noiseFrequency);
+        this.noise.setAbs(this.remapX, this.remapY, this.remapZ);
+        this.noise.setAmplititude(this.strengthX, this.strengthY, this.strengthZ);
+        this.noise.setOctaves(this.octaves, this.octaveMultiplier, this.octaveScale);
+    }
+
     /**
      * @en Apply noise effect to particle.
      * @zh 作用噪声效果到粒子上。
@@ -294,20 +309,11 @@ export class NoiseModule extends ParticleModuleBase {
      * @internal
      */
     public animate (particle: Particle, dt: number) {
-        this.noise.setTime(particle.particleSystem.time);
-        this.noise.setSpeed(this.noiseSpeedX, this.noiseSpeedY, this.noiseSpeedZ);
-        this.noise.setFrequency(this.noiseFrequency);
-        this.noise.setAbs(this.remapX, this.remapY, this.remapZ);
-        this.noise.setAmplititude(this.strengthX, this.strengthY, this.strengthZ);
-        this.noise.setOctaves(this.octaves, this.octaveMultiplier, this.octaveScale);
-
         this.samplePosition.set(particle.position);
-        this.samplePosition.add3f(Math.random() * 1.0, Math.random() * 1.0, Math.random() * 1.0);
         this.noise.setSamplePoint(this.samplePosition);
         this.noise.getNoiseParticle();
 
         const noisePosition: Vec3 = this.noise.getResult();
-        noisePosition.multiply3f(Math.random(), Math.random(), Math.random());
         Vec3.add(particle.position, particle.position, noisePosition.multiplyScalar(dt));
     }
 

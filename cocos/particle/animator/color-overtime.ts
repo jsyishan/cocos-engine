@@ -67,6 +67,15 @@ export default class ColorOvertimeModule extends ParticleModuleBase {
     public color = new GradientRange();
     public name = PARTICLE_MODULE_NAME.COLOR;
 
+    constructor () {
+        super();
+        this.needUpdate = true;
+    }
+
+    public update (ps, space, worldTransform) {
+        this.color.bake();
+    }
+
     /**
      * @en Apply color animation to particle.
      * @zh 作用颜色变换到粒子上。

@@ -123,8 +123,11 @@ export default class ForceOvertimeModule extends ParticleModuleBase {
      * @param worldTransform @en Particle system world transform. @zh 粒子系统的世界变换矩阵。
      * @internal
      */
-    public update (space, worldTransform) {
+    public update (ps, space, worldTransform) {
         this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
+        this.x.bake();
+        this.y.bake();
+        this.z.bake();
     }
 
     /**
@@ -136,14 +139,10 @@ export default class ForceOvertimeModule extends ParticleModuleBase {
      */
     public animate (p: Particle, dt) {
         const normalizedTime = 1 - p.remainingLifetime / p.startLifetime;
-        const randX = isCurveTwoValues(this.x) ? pseudoRandom(p.randomSeed + FORCE_OVERTIME_RAND_OFFSET) : 0;
-        const randY = isCurveTwoValues(this.y) ? pseudoRandom(p.randomSeed + FORCE_OVERTIME_RAND_OFFSET) : 0;
-        const randZ = isCurveTwoValues(this.z) ? pseudoRandom(p.randomSeed + FORCE_OVERTIME_RAND_OFFSET) : 0;
-
-        const force = Vec3.set(_temp_v3,
-            this.x.evaluate(normalizedTime, randX)!,
-            this.y.evaluate(normalizedTime, randY)!,
-            this.z.evaluate(normalizedTime, randZ)!);
+        // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+        const rndSeed = pseudoRandom(p.randomSeed + FORCE_OVERTIME_RAND_OFFSET);
+        // eslint-disable-next-line max-len
+        const force = Vec3.set(_temp_v3, this.x.evaluate(normalizedTime, rndSeed), this.y.evaluate(normalizedTime, rndSeed), this.z.evaluate(normalizedTime, rndSeed));
         if (this.needTransform) {
             Vec3.transformQuat(force, force, this.rotation);
         }

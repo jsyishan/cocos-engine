@@ -23,17 +23,23 @@
 */
 
 import { ccclass, tooltip, displayOrder, range, type, serializable } from 'cc.decorator';
-import { Mat4, pseudoRandom, Quat, Vec3 } from '../../core';
+import { Mat3, Mat4, pseudoRandom, Quat, Vec3 } from '../../core';
 import { Space, ModuleRandSeed } from '../enum';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import { calculateTransform, isCurveTwoValues } from '../particle-general-function';
 import CurveRange from './curve-range';
+import { ParticleSystem } from '../particle-system';
 
 const VELOCITY_X_OVERTIME_RAND_OFFSET = ModuleRandSeed.VELOCITY_X;
 const VELOCITY_Y_OVERTIME_RAND_OFFSET = ModuleRandSeed.VELOCITY_Y;
 const VELOCITY_Z_OVERTIME_RAND_OFFSET = ModuleRandSeed.VELOCITY_Z;
 
 const _temp_v3 = new Vec3();
+const _temp_quat = new Quat();
+const _temp_mat3 = new Mat3();
+const _temp_new = new Vec3();
+const _temp_normalize = new Vec3();
+const _temp_old = new Vec3();
 
 /**
  * @en
@@ -107,6 +113,76 @@ export default class VelocityOvertimeModule extends ParticleModuleBase {
 
     /**
      * @en Velocity [[Space]] used to calculate particle velocity.
+     * @zh 沿 X 轴的轨道速度。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(6)
+    @tooltip('i18n:velocityOvertimeModule.orbitX')
+    public orbitX = new CurveRange();
+    /**
+     * @zh 沿 Y 轴的轨道速度。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(7)
+    @tooltip('i18n:velocityOvertimeModule.orbitY')
+    public orbitY = new CurveRange();
+
+    /**
+     * @zh 沿 Z 轴的轨道速度。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(8)
+    @tooltip('i18n:velocityOvertimeModule.orbitZ')
+    public orbitZ = new CurveRange();
+
+    /**
+     * @zh 沿 X 轴的轨道偏移。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(9)
+    @tooltip('i18n:velocityOvertimeModule.offsetX')
+    public offsetX = new CurveRange();
+
+    /**
+     * @zh 沿 Y 轴的轨道偏移。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(10)
+    @tooltip('i18n:velocityOvertimeModule.offsetY')
+    public offsetY = new CurveRange();
+
+    /**
+     * @zh 沿 Z 轴的轨道偏移。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(11)
+    @tooltip('i18n:velocityOvertimeModule.offsetZ')
+    public offsetZ = new CurveRange();
+
+    /**
+     * @zh 轨道半径。
+     */
+    @type(CurveRange)
+    @serializable
+    @range([-1, 1])
+    @displayOrder(12)
+    @tooltip('i18n:velocityOvertimeModule.radius')
+    public radius = new CurveRange();
+
+    /**
+>>>>>>> v3.6.2-emoji
      * @zh 速度计算时采用的坐标系[[Space]]。
      */
     @type(Space)
@@ -118,6 +194,9 @@ export default class VelocityOvertimeModule extends ParticleModuleBase {
     private rotation: Quat;
     private needTransform: boolean;
     public name = PARTICLE_MODULE_NAME.VELOCITY;
+    private worldToLocal: Mat3;
+    private localToWorld: Mat3;
+    private hasOrbital: boolean;
 
     constructor () {
         super();
@@ -125,6 +204,9 @@ export default class VelocityOvertimeModule extends ParticleModuleBase {
         this.speedModifier.constant = 1;
         this.needTransform = false;
         this.needUpdate = true;
+        this.worldToLocal = new Mat3();
+        this.localToWorld = new Mat3();
+        this.hasOrbital = false;
     }
 
     /**
@@ -134,8 +216,65 @@ export default class VelocityOvertimeModule extends ParticleModuleBase {
      * @param worldTransform @en Particle system world transform @zh 粒子系统的世界变换矩阵
      * @internal
      */
-    public update (space: number, worldTransform: Mat4) {
-        this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
+    public update (ps: ParticleSystem, space: number, worldTransform: Mat4) {
+        // this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
+        this.hasOrbital = this.offsetX.getMaxAbs() > 0 || this.offsetY.getMaxAbs() > 0 || this.offsetZ.getMaxAbs() > 0
+            || this.orbitX.getMaxAbs() > 0 || this.orbitY.getMaxAbs() > 0 || this.orbitZ.getMaxAbs() > 0;
+        // if (this.needTransform) {
+        //     if (this.hasOrbital) {
+        //         Mat3.fromMat4(this.localToWorld, worldTransform);
+        //         Mat3.invert(this.worldToLocal, this.localToWorld);
+        //     }
+        // }
+        this.offsetX.bake();
+        this.offsetY.bake();
+        this.offsetZ.bake();
+        this.radius.bake();
+        this.orbitX.bake();
+        this.orbitY.bake();
+        this.orbitZ.bake();
+        this.speedModifier.bake();
+        this.x.bake();
+        this.y.bake();
+        this.z.bake();
+    }
+
+    private calculateOrbital (p: Particle, dt: number, normalizedTime: number, speedMod: number) {
+        const rndSeedX = pseudoRandom(p.randomSeed ^ VELOCITY_X_OVERTIME_RAND_OFFSET);
+        const rndSeedY = pseudoRandom(p.randomSeed ^ VELOCITY_Y_OVERTIME_RAND_OFFSET);
+        const rndSeedZ = pseudoRandom(p.randomSeed ^ VELOCITY_Z_OVERTIME_RAND_OFFSET);
+        const offX = this.offsetX.evaluate(normalizedTime, rndSeedX)!;
+        const offY = this.offsetY.evaluate(normalizedTime, rndSeedY)!;
+        const offZ = this.offsetZ.evaluate(normalizedTime, rndSeedZ)!;
+        const offset = Vec3.set(_temp_v3, offX, offY, offZ);
+
+        const radial = this.radius.evaluate(normalizedTime, pseudoRandom(p.randomSeed)) * dt;
+
+        const tod = dt * Particle.R2D;
+
+        const avelX = this.orbitX.evaluate(normalizedTime, rndSeedX)! * tod;
+        const avelY = this.orbitY.evaluate(normalizedTime, rndSeedY)! * tod;
+        const avelZ = this.orbitZ.evaluate(normalizedTime, rndSeedZ)! * tod;
+        const angM = Mat3.fromQuat(_temp_mat3, Quat.fromEuler(_temp_quat, avelX, avelY, avelZ));
+
+        _temp_old.set(p.position);
+        if (this.needTransform) {
+            Vec3.transformMat3(_temp_old, _temp_old, this.worldToLocal);
+        }
+        Vec3.subtract(_temp_old, _temp_old, offset);
+
+        _temp_new.set(_temp_old);
+        Vec3.transformMat3(_temp_new, _temp_new, angM);
+        Vec3.normalize(_temp_normalize, _temp_new);
+        Vec3.multiplyScalar(_temp_normalize, _temp_normalize, radial);
+        Vec3.add(_temp_new, _temp_new, _temp_normalize);
+        let animatedVelocity = Vec3.subtract(_temp_new, _temp_new, _temp_old);
+        if (this.needTransform) {
+            animatedVelocity = Vec3.transformMat3(_temp_new, _temp_new, this.localToWorld);
+        }
+
+        Vec3.multiplyScalar(animatedVelocity, animatedVelocity, 1 / dt);
+        Vec3.add(p.animatedVelocity, p.animatedVelocity, animatedVelocity);
     }
 
     /**
@@ -160,8 +299,14 @@ export default class VelocityOvertimeModule extends ParticleModuleBase {
             Vec3.transformQuat(vel, vel, this.rotation);
         }
         Vec3.add(p.animatedVelocity, p.animatedVelocity, vel);
+
+        const speedMod = this.speedModifier.evaluate(normalizedTime, pseudoRandom(p.randomSeed + VELOCITY_X_OVERTIME_RAND_OFFSET))!;
+
+        if (this.hasOrbital) {
+            this.calculateOrbital(p, dt, normalizedTime, speedMod);
+        }
+
         Vec3.add(p.ultimateVelocity, p.velocity, p.animatedVelocity);
-        Vec3.multiplyScalar(p.ultimateVelocity, p.ultimateVelocity,
-            this.speedModifier.evaluate(1 - p.remainingLifetime / p.startLifetime, randSpeed)!);
+        Vec3.multiplyScalar(p.ultimateVelocity, p.ultimateVelocity, speedMod);
     }
 }

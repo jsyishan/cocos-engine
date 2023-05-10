@@ -75,6 +75,7 @@ export class Settings {
         }
         if (!path) return Promise.resolve();
         return new Promise((resolve, reject) => {
+            console.time('Settings 3');
             if (!HTML5 && !path.startsWith('http')) {
                 // TODO: readJsonSync not working on Taobao IDE
                 if (TAOBAO || TAOBAO_MINIGAME) {
@@ -101,6 +102,7 @@ export class Settings {
                 xhr.responseType = 'text';
                 xhr.onload = () => {
                     this._settings = JSON.parse(xhr.response);
+                    console.timeEnd('Settings 3');
                     resolve();
                 };
                 xhr.onerror = () => {

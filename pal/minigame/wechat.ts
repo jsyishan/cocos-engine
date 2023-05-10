@@ -43,7 +43,16 @@ minigame.wx.onWheel = wx.onWheel?.bind(wx);
 // #endregion platform related
 
 // #region SystemInfo
-let _cachedSystemInfo: SystemInfo = wx.getSystemInfoSync();
+let _cachedSystemInfo: SystemInfo;
+function updateCachedSystemInfo () {
+    _cachedSystemInfo = wx.getSystemInfoSync();
+    if (_cachedSystemInfo.system.toLowerCase().indexOf('ios') >= 0) {
+        _cachedSystemInfo.platform = 'ios';
+    } else {
+        _cachedSystemInfo.platform = 'android';
+    }
+}
+updateCachedSystemInfo();
 // @ts-expect-error TODO: move into minigame.d.ts
 minigame.testAndUpdateSystemInfoCache = function (testAmount: number, testInterval: number) {
     let successfullyTestTimes = 0;
@@ -69,6 +78,9 @@ minigame.onWindowResize?.(() => {
     _cachedSystemInfo = wx.getSystemInfoSync() as SystemInfo;
 });
 minigame.getSystemInfoSync = function () {
+    // NOTE: wechat want to use screenWidth/screenHeight to create canvas
+    _cachedSystemInfo.windowHeight = _cachedSystemInfo.screenHeight;
+    _cachedSystemInfo.windowWidth = _cachedSystemInfo.screenWidth;
     return _cachedSystemInfo;
 };
 
@@ -86,18 +98,19 @@ Object.defineProperty(minigame, 'isLandscape', {
     },
 });
 // init landscapeOrientation as LANDSCAPE_RIGHT
-let landscapeOrientation = Orientation.LANDSCAPE_RIGHT;
-if (systemInfo.platform.toLocaleLowerCase() !== 'android') {
-    // onDeviceOrientationChange doesn't work well on Android.
-    // see this issue: https://developers.weixin.qq.com/community/minigame/doc/000482138dc460e56cfaa5cb15bc00
-    wx.onDeviceOrientationChange((res) => {
-        if (res.value === 'landscape') {
-            landscapeOrientation = Orientation.LANDSCAPE_RIGHT;
-        } else if (res.value === 'landscapeReverse') {
-            landscapeOrientation = Orientation.LANDSCAPE_LEFT;
-        }
-    });
-}
+const landscapeOrientation = Orientation.PORTRAIT;
+// TODO(): toLocaleLowerCase not implemented in wechat
+// if (systemInfo.platform.toLocaleLowerCase() !== 'android') {
+//     // onDeviceOrientationChange doesn't work well on Android.
+//     // see this issue: https://developers.weixin.qq.com/community/minigame/doc/000482138dc460e56cfaa5cb15bc00
+//     wx.onDeviceOrientationChange((res) => {
+//         if (res.value === 'landscape') {
+//             landscapeOrientation = Orientation.LANDSCAPE_RIGHT;
+//         } else if (res.value === 'landscapeReverse') {
+//             landscapeOrientation = Orientation.LANDSCAPE_LEFT;
+//         }
+//     });
+// }
 Object.defineProperty(minigame, 'orientation', {
     get () {
         return minigame.isLandscape ? landscapeOrientation : Orientation.PORTRAIT;

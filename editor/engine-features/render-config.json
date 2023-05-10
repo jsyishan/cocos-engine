@@ -252,6 +252,32 @@
             "wechatPlugin": false,
             "category": "animation"
         },
+
+        "lights": {
+            "default": ["lights"],
+            "label": "i18n:ENGINE.features.lights.label",
+            "description": "i18n:ENGINE.features.lights.description",
+            "category": "3d"
+        },
+        "particle-billboard": {
+            "default": ["particle-billboard"],
+            "label": "i18n:ENGINE.features.particle_billboard.label",
+            "description": "i18n:ENGINE.features.particle_billboard.description",
+            "category": "3d"
+        },
+        "particle-line": {
+            "default": ["particle-line"],
+            "label": "i18n:ENGINE.features.particle_line.label",
+            "description": "i18n:ENGINE.features.particle_line.description",
+            "category": "3d"
+        },
+        "skinned-mesh-renderer": {
+            "default": ["skinned-mesh-renderer"],
+            "label": "i18n:ENGINE.features.skinned_mesh_renderer.label",
+            "description": "i18n:ENGINE.features.skinned_mesh_renderer.description",
+            "category": "3d"
+        },
+
         "custom-pipeline": {
             "default": [],
             "label": "i18n:ENGINE.features.custom_pipeline.label",

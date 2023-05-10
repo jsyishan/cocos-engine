@@ -1041,6 +1041,22 @@ module.exports = {
             label: "WebSocket Server",
             description: "Enable WebSocket Server for native. Note: WebSocket must also be enabled.",
         },
+        lights: {
+            label: "lights",
+            description: "lights",
+        },
+        particle_billboard: {
+            label: "particle billboard",
+            description: "The Billboard component is used to render a square that always faces the camera",
+        },
+        particle_line: {
+            label: "particle line",
+            description: "The Line component renders a line segment that is connected to a given point in the 3D scene; the line segment rendered by the Line component has a width and always faces the camera, similar to the billboard component",
+        },
+        skinned_mesh_renderer: {
+            label: "skinned mesh renderer (SkinnedMeshRenderer)",
+            description: "The skinned mesh renderer component.",
+        },
     },
     renderable_2d: {
         srcBlendFactor: 'Specifies the source blend mode, <br>it will clone a new material object.',

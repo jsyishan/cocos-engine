@@ -2475,7 +2475,8 @@ export function WebGL2CmdFuncBindStates (
                             gl.enableVertexAttribArray(glLoc);
                             cache.glCurrentAttribLocs[glLoc] = true;
 
-                            gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset);
+                            const instOffset = glAttrib.isInstanced ? cache.drawInfo.firstInstance * glAttrib.stride : 0;
+                            gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset + instOffset);
                             gl.vertexAttribDivisor(glLoc, glAttrib.isInstanced ? 1 : 0);
                         }
                     }
@@ -2530,7 +2531,8 @@ export function WebGL2CmdFuncBindStates (
                         }
                         cache.glCurrentAttribLocs[glLoc] = true;
 
-                        gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset);
+                        const instOffset = glAttrib.isInstanced ? cache.drawInfo.firstInstance * glAttrib.stride : 0;
+                        gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset + instOffset);
                         gl.vertexAttribDivisor(glLoc, glAttrib.isInstanced ? 1 : 0);
                     }
                 }
@@ -2626,7 +2628,6 @@ export function WebGL2CmdFuncDraw (device: WebGL2Device, drawInfo: Readonly<Draw
     const { gl } = device;
     const { gpuInputAssembler, glPrimitive } = gfxStateCache;
     const md = device.extensions.WEBGL_multi_draw;
-
     if (gpuInputAssembler) {
         const indexBuffer = gpuInputAssembler.gpuIndexBuffer;
         if (gpuInputAssembler.gpuIndirectBuffer) {

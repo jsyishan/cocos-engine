@@ -70,6 +70,8 @@ const Mode = Enum({
  * GradientRange 是一类数据结构，其包含了多个常数颜色或渐变色，计算时其将根据计算模式计算最终颜色，粒子系统使用此数据结构对所有的粒子的属性进行修改。
  * 详细的计算模式请参考 [[GradientRange.Mode]] 的解释。
  */
+const outColor = new Color();
+
 @ccclass('cc.GradientRange')
 export default class GradientRange {
     /**
@@ -151,15 +153,66 @@ export default class GradientRange {
 
     private _color = Color.WHITE.clone();
 
-    /**
-     * @en Calculate gradient value.
-     * @zh 计算颜色渐变曲线数值。
-     * @param time @en Normalized time to interpolate. @zh 用于插值的归一化时间。
-     * @param rndRatio @en Interpolation ratio when mode is TwoColors or TwoGradients.
-     *                     Particle attribute will pass in a random number to get a random result.
-     *                 @zh 当模式为双色或双渐变色时，使用的插值比例，通常粒子系统会传入一个随机数以获得一个随机结果。
-     * @returns @en Gradient value. @zh 颜色渐变曲线的值。
-     */
+    private preSample = true && !EDITOR;
+    private sampleCount = 64;
+    private interval = 1.0 / (this.sampleCount - 1.0);
+
+    private minBuff: Color[] | null = null;
+    private maxBuff: Color[] | null = null;
+
+    private createBuff () {
+        if (this.mode === Mode.Gradient) {
+            this.maxBuff = new Array(0);
+            for (let i = 0; i < this.sampleCount; ++i) {
+                this.maxBuff.push(new Color());
+                const time = i * this.interval;
+                const value = this.gradient.evaluate(time);
+                this.maxBuff[i].set(value);
+            }
+        } else if (this.mode === Mode.TwoGradients) {
+            this.minBuff = new Array(0);
+            this.maxBuff = new Array(0);
+            for (let i = 0; i < this.sampleCount; ++i) {
+                this.minBuff.push(new Color());
+                this.maxBuff.push(new Color());
+                const time = i * this.interval;
+                const valueMin = this.gradientMin.evaluate(time);
+                const valueMax = this.gradientMax.evaluate(time);
+                this.minBuff[i].set(valueMin);
+                this.maxBuff[i].set(valueMax);
+            }
+        }
+    }
+
+    public bake () {
+        if (this.preSample) {
+            if (this.mode === Mode.Gradient && this.maxBuff === null) {
+                this.createBuff();
+            } else if (this.mode === Mode.TwoGradients && (this.maxBuff === null || this.minBuff === null)) {
+                this.createBuff();
+            }
+        }
+    }
+
+    private sample (buff: Color[] | null, time: number): Color {
+        const sampleCoord = time * (this.sampleCount - 1);
+        const prev = Math.floor(sampleCoord);
+        const next = Math.ceil(sampleCoord);
+        if (buff) {
+            if (prev === next) {
+                outColor.set(buff[prev]);
+                return outColor;
+            } else {
+                const ratio = sampleCoord - prev;
+                Color.lerp(outColor, buff[prev], buff[next], ratio);
+                return outColor;
+            }
+        } else {
+            outColor.set(Color.WHITE);
+            return outColor;
+        }
+    }
+
     public evaluate (time: number, rndRatio: number) {
         switch (this._mode) {
         case Mode.Color:
@@ -170,9 +223,44 @@ export default class GradientRange {
         case Mode.RandomColor:
             return this.gradient.randomColor();
         case Mode.Gradient:
-            return this.gradient.evaluate(time);
+            if (this.preSample) {
+                return this.sample(this.maxBuff, time);
+            } else {
+                return this.gradient.evaluate(time);
+            }
         case Mode.TwoGradients:
-            Color.lerp(this._color, this.gradientMin.evaluate(time), this.gradientMax.evaluate(time), rndRatio);
+            if (this.preSample) {
+                Color.lerp(this._color, this.sample(this.minBuff, time), this.sample(this.maxBuff, time), rndRatio);
+            } else {
+                Color.lerp(this._color, this.gradientMin.evaluate(time), this.gradientMax.evaluate(time), rndRatio);
+            }
+            return this._color;
+        default:
+            return this.color;
+        }
+    }
+
+    public evaluateOne (time: number, rndRatio: number) {
+        switch (this._mode) {
+        case Mode.Color:
+            return this.color;
+        case Mode.TwoColors:
+            this._color.set(this.colorMax);
+            return this._color;
+        case Mode.RandomColor:
+            return this.gradient.randomColor();
+        case Mode.Gradient:
+            if (this.preSample) {
+                return this.sample(this.maxBuff, time);
+            } else {
+                return this.gradient.evaluate(time);
+            }
+        case Mode.TwoGradients:
+            if (this.preSample) {
+                this._color.set(this.sample(this.maxBuff, time));
+            } else {
+                this._color.set(this.gradientMax.evaluate(time));
+            }
             return this._color;
         default:
             return this.color;
@@ -187,6 +275,15 @@ export default class GradientRange {
     }
 }
 
+/**
+ * @en Calculate gradient value.
+ * @zh 计算颜色渐变曲线数值。
+ * @param time @en Normalized time to interpolate. @zh 用于插值的归一化时间。
+ * @param rndRatio @en Interpolation ratio when mode is TwoColors or TwoGradients.
+ *                     Particle attribute will pass in a random number to get a random result.
+ *                 @zh 当模式为双色或双渐变色时，使用的插值比例，通常粒子系统会传入一个随机数以获得一个随机结果。
+ * @returns @en Gradient value. @zh 颜色渐变曲线的值。
+ */
 function evaluateGradient (gr: GradientRange, time: number, index: number) {
     switch (gr.mode) {
     case Mode.Color:

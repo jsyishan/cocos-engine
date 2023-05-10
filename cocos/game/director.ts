@@ -176,6 +176,11 @@ export class Director extends EventTarget {
     public static readonly EVENT_AFTER_RENDER = 'director_after_render';
 
     /**
+     * @zh 当前渲染帧更新动态 vbo 的事件
+     */
+    public static readonly EVENT_UPLOAD_DYNAMIC_VBO = 'director_upload_dynamic_vbo';
+
+    /**
      * @en The event which will be triggered before the physics process.<br/>
      * @zh 物理过程之前所触发的事件。
      * @event Director.EVENT_BEFORE_PHYSICS
@@ -465,9 +470,9 @@ export class Director extends EventTarget {
         if (bundle) {
             this.emit(Director.EVENT_BEFORE_SCENE_LOADING, sceneName);
             this._loadingScene = sceneName;
-            console.time(`LoadScene ${sceneName}`);
+            console.time(`phase LoadScene ${sceneName}`);
             bundle.loadScene(sceneName, (err, scene) => {
-                console.timeEnd(`LoadScene ${sceneName}`);
+                console.timeEnd(`phase LoadScene ${sceneName}`);
                 this._loadingScene = '';
                 if (err) {
                     error(err);
@@ -765,13 +770,17 @@ export class Director extends EventTarget {
         this.registerSystem(Scheduler.ID, this._scheduler, 200);
         this._root = new Root(deviceManager.gfxDevice);
         const rootInfo = {};
+        console.time('phase 9.1.1');
         this._root.initialize(rootInfo);
 
         this.setupRenderPipelineBuilder();
 
+        console.timeEnd('phase 9.1.1');
+        console.time('phase 9.1.2');
         for (let i = 0; i < this._systems.length; i++) {
             this._systems[i].init();
         }
+        console.timeEnd('phase 9.1.2');
         this.emit(Director.EVENT_INIT);
     }
 

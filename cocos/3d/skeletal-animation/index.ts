@@ -24,6 +24,7 @@
 
 import './data-pool-manager';
 
+export { Skeleton } from '../assets/skeleton';
 export * from './skeletal-animation-data-hub';
 export * from './skeletal-animation-state';
 export * from './skeletal-animation';

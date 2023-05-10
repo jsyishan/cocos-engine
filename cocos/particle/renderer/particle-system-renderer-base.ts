@@ -52,8 +52,9 @@ export interface IParticleSystemRenderer {
     getFreeParticle (): Particle | null;
     setNewParticle (p: Particle): void;
     getDefaultMaterial(): Material | null;
-    updateRotation (pass: Pass | null): void;
-    updateScale (pass: Pass | null): void;
+    updateRotation (mat: Material | null): void;
+    updateScale (mat: Material | null): void;
+    clearSubemitter (): void;
     updateParticles (dt: number): number;
     updateRenderData (): void;
     enableModule (name: string, val: boolean, pm: IParticleModule): void;
@@ -63,6 +64,8 @@ export interface IParticleSystemRenderer {
     setUseInstance (value: boolean): void;
     getUseInstance (): boolean;
     getNoisePreview (out: number[], width: number, height: number): void;
+    getUseCustom (): boolean;
+    setUseCustom (val): void;
 }
 
 export abstract class ParticleSystemRendererBase implements IParticleSystemRenderer {
@@ -71,6 +74,7 @@ export abstract class ParticleSystemRendererBase implements IParticleSystemRende
     protected _renderInfo: ParticleSystemRenderer | null = null;
     protected _vertAttrs: Attribute[] = [];
     protected _useInstance: boolean;
+    protected _useCustom: boolean;
 
     constructor (info: ParticleSystemRenderer) {
         this._renderInfo = info;
@@ -79,6 +83,15 @@ export abstract class ParticleSystemRendererBase implements IParticleSystemRende
         } else {
             this._useInstance = true;
         }
+        this._useCustom = false;
+    }
+
+    public getUseCustom (): boolean {
+        return this._useCustom;
+    }
+
+    public setUseCustom (val: boolean): void {
+        this._useCustom = val;
     }
 
     public getUseInstance (): boolean {
@@ -164,8 +177,9 @@ export abstract class ParticleSystemRendererBase implements IParticleSystemRende
     public abstract updateMaterialParams () : void;
     public abstract setNewParticle (p: Particle): void;
     public abstract getDefaultMaterial(): Material | null;
-    public abstract updateRotation (pass: Pass | null): void;
-    public abstract updateScale (pass: Pass | null): void;
+    public abstract updateRotation (mat: Material | null): void;
+    public abstract updateScale (mat: Material | null): void;
+    public abstract clearSubemitter(): void;
     public abstract updateParticles (dt: number): number;
     public abstract updateRenderData (): void;
     public abstract enableModule (name: string, val: boolean, pm: IParticleModule): void;

@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { Rect, Viewport } from '../base/define';
+import { DrawInfo, Rect, Viewport } from '../base/define';
 import { BlendState, DepthStencilState, RasterizerState } from '../base/pipeline-state';
 
 export interface IWebGLTexUnit {
@@ -46,6 +46,7 @@ export class WebGLStateCache {
     public glEnabledAttribLocs: boolean[] = [];
     public glCurrentAttribLocs: boolean[] = [];
     public texUnitCacheMap: Record<string, number> = {};
+    public drawInfo: DrawInfo = new DrawInfo();
 
     initialize (texUnit: number, vertexAttributes: number) {
         for (let i = 0; i < texUnit; ++i) this.glTexUnits.push({ glTexture: null });

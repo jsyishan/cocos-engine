@@ -22,7 +22,7 @@
  THE SOFTWARE.
 */
 
-import { CCClass, Color, lerp, repeat, Enum, EPSILON, approx } from '../../core';
+import { CCClass, Color, lerp, repeat, Enum, EPSILON, approx, random } from '../../core';
 
 const Mode = Enum({
     Blend: 0,
@@ -152,8 +152,8 @@ export default class Gradient {
      * @returns @en Randomized color. @zh 随机生成的颜色。
      */
     public randomColor () {
-        const c = this.colorKeys[Math.trunc(Math.random() * this.colorKeys.length)];
-        const a = this.alphaKeys[Math.trunc(Math.random() * this.alphaKeys.length)];
+        const c = this.colorKeys[Math.trunc(random() * this.colorKeys.length)];
+        const a = this.alphaKeys[Math.trunc(random() * this.alphaKeys.length)];
         this._color.set(c.color);
         this._color._set_a_unsafe(a.alpha);
         return this._color;

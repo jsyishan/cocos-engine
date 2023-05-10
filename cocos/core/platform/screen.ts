@@ -43,7 +43,8 @@ class Screen {
         const exactFitScreen = settings.querySettings(Settings.Category.SCREEN, 'exactFitScreen') ?? true;
         const orientation = settings.querySettings(Settings.Category.SCREEN, 'orientation') ?? 'auto';
         const isHeadlessMode = settings.querySettings(Settings.Category.RENDERING, 'renderMode') === 3;
-        screenAdapter.init({ exactFitScreen, configOrientation: orientation, isHeadlessMode }, () => {
+        const overrideDpr = settings.querySettings(Settings.Category.SCREEN, 'overrideDpr');
+        screenAdapter.init({ exactFitScreen, configOrientation: orientation, isHeadlessMode, overrideDpr }, () => {
             const director = legacyCC.director;
             if (!director.root?.pipeline) {
                 warnID(1220);

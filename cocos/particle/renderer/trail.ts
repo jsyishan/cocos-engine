@@ -22,19 +22,21 @@
  THE SOFTWARE.
 */
 
+import { DEBUG } from 'internal:constants';
 import { ccclass, tooltip, displayOrder, type, serializable, range } from 'cc.decorator';
 import { Material } from '../../asset/assets/material';
 import { RenderingSubMesh } from '../../asset/assets/rendering-sub-mesh';
 import { director } from '../../game/director';
 import { AttributeName, BufferUsageBit, Format, FormatInfos, MemoryUsageBit, PrimitiveMode,
     Device, Attribute, Buffer, IndirectBuffer, BufferInfo, DrawInfo, DRAW_INFO_SIZE } from '../../gfx';
-import { Color, Mat4, Quat, toRadian, Vec3, Pool, warnID, cclegacy } from '../../core';
+import { Color, Mat4, Quat, toRadian, Vec3, Pool, warnID, cclegacy, assertIsTrue } from '../../core';
 import { scene } from '../../render-scene';
 import CurveRange from '../animator/curve-range';
 import GradientRange from '../animator/gradient-range';
 import { Space, TextureMode, TrailMode } from '../enum';
 import { Particle } from '../particle';
 import { TransformBit } from '../../scene-graph/node-enum';
+import { DynamicBuffer, globalDynamicBufferMap } from '../models/particle-batch-model';
 
 const PRE_TRIANGLE_INDEX = 1;
 const NEXT_TRIANGLE_INDEX = 1 << 2;
@@ -42,7 +44,6 @@ const DIRECTION_THRESHOLD = Math.cos(toRadian(100));
 
 const _temp_trailEle = { position: new Vec3(), velocity: new Vec3() } as ITrailElement;
 const _temp_quat = new Quat();
-const _temp_xform = new Mat4();
 const _temp_vec3 = new Vec3();
 const _temp_vec3_1 = new Vec3();
 const _temp_color = new Color();
@@ -326,8 +327,6 @@ export default class TrailModule {
     private _trailSegments: Pool<TrailSegment> | null = null;
     private _particleTrail: Map<Particle, TrailSegment>;
     private _trailModel: scene.Model | null = null;
-    private _iaInfo: IndirectBuffer;
-    private _iaInfoBuffer: Buffer | null = null;
     private _subMeshData: RenderingSubMesh | null = null;
     private _vertAttrs: Attribute[];
     private _vbF32: Float32Array | null = null;
@@ -335,11 +334,15 @@ export default class TrailModule {
     private _iBuffer: Uint16Array | null = null;
     private _needTransform = false;
     private _material: Material | null = null;
+    private _vertexAttribHash = '';
+    private _firstIndex = 0;
+    private _indexOffset = 0;
     private _inited: boolean;
+    private _curTrailNum = 0;
+
+    private _psTransform = new Mat4();
 
     constructor () {
-        this._iaInfo = new IndirectBuffer([new DrawInfo()]);
-
         this._vertAttrs = [
             new Attribute(AttributeName.ATTR_POSITION, Format.RGB32F),   // xyz:position
             new Attribute(AttributeName.ATTR_TEX_COORD, Format.RGBA32F), // x:index y:size zw:texcoord
@@ -350,7 +353,9 @@ export default class TrailModule {
         this._vertSize = 0;
         for (const a of this._vertAttrs) {
             this._vertSize += FormatInfos[a.format].size;
+            this._vertexAttribHash += `n${a.name}f${a.format}l${a.location}`;
         }
+        this._vertexAttribHash += `vertex`;
 
         this._particleTrail = new Map<Particle, TrailSegment>();
 
@@ -362,16 +367,22 @@ export default class TrailModule {
         this.minParticleDistance = this._minParticleDistance;
         let burstCount = 0;
         const psTime = ps.startLifetime.getMax();
-        const psRate = ps.rateOverTime.getMax();
+        let psSpeed = 1;
+        if (ps._parentEmitter) {
+            psSpeed = ps._parentEmitter.startSpeed.getMax();
+        }
+        // eslint-disable-next-line max-len
+        const psRate = ps.rateOverTime.getMax() > ps.rateOverDistance.getMax() * psSpeed ? ps.rateOverTime.getMax() : ps.rateOverDistance.getMax() * psSpeed;
         const duration = ps.duration;
         for (let i = 0, len = ps.bursts.length; i < len; i++) {
             const b = ps.bursts[i];
             burstCount += b.getMaxCount(ps) * Math.ceil(psTime / duration);
         }
-        if (this.lifeTime.getMax() < 1.0) {
-            warnID(6036);
+        let parentEmitCount = 1;
+        if (ps._parentEmitter) {
+            parentEmitCount = ps._parentEmitter.capacity;
         }
-        this._trailNum = Math.ceil(psTime * Math.ceil(this.lifeTime.getMax()) * 60 * (psRate * duration + burstCount));
+        this._trailNum = Math.ceil(psTime * Math.ceil(this.lifeTime.getMax()) * 60 * parentEmitCount * (psRate * duration + burstCount));
         this._trailSegments = new Pool(() => new TrailSegment(10), Math.ceil(psRate * duration), (obj: TrailSegment) => obj.trailElements.length = 0);
         if (this._enable) {
             this.enable = this._enable;
@@ -451,10 +462,11 @@ export default class TrailModule {
     }
 
     public update () {
-        this._trailLifetime = this.lifeTime.evaluate(this._particleSystem._time, 1)!;
+        this.lifeTime.bake();
+        this._trailLifetime = this.lifeTime.evaluateOne(this._particleSystem._time, 1)!;
         if (this.space === Space.World && this._particleSystem._simulationSpace === Space.Local) {
             this._needTransform = true;
-            this._particleSystem.node.getWorldMatrix(_temp_xform);
+            this._particleSystem.node.getWorldMatrix(this._psTransform);
             this._particleSystem.node.getWorldRotation(_temp_quat);
         } else {
             this._needTransform = false;
@@ -473,7 +485,7 @@ export default class TrailModule {
             } else {
                 p.trailDelay++;
             }
-            return;
+            // return;
         }
 
         let trail = this._particleTrail.get(p);
@@ -485,7 +497,7 @@ export default class TrailModule {
         }
         let lastSeg = trail.getElement(trail.end - 1);
         if (this._needTransform) {
-            Vec3.transformMat4(_temp_vec3, p.position, _temp_xform);
+            Vec3.transformMat4(_temp_vec3, p.position, this._psTransform);
         } else {
             Vec3.copy(_temp_vec3, p.position);
         }
@@ -502,10 +514,11 @@ export default class TrailModule {
 
         Vec3.copy(lastSeg.position, _temp_vec3);
         lastSeg.lifetime = 0;
+        this.widthRatio.bake();
         if (this.widthFromParticle) {
-            lastSeg.width = p.size.x * this.widthRatio.evaluate(0, 1)!;
+            lastSeg.width = p.size.x * this.widthRatio.evaluateOne(0, 1)!;
         } else {
-            lastSeg.width = this.widthRatio.evaluate(0, 1)!;
+            lastSeg.width = this.widthRatio.evaluateOne(0, 1)!;
         }
 
         const trailNum = trail.count();
@@ -527,7 +540,8 @@ export default class TrailModule {
         if (this.colorFromParticle) {
             lastSeg.color.set(p.color);
         } else {
-            lastSeg.color.set(this.colorOvertime.evaluate(0, 1));
+            this.colorOvertime.bake();
+            lastSeg.color.set(this.colorOvertime.evaluateOne(0, 1));
         }
     }
 
@@ -540,29 +554,56 @@ export default class TrailModule {
         }
     }
 
+    private ensureBuffer () {
+        const vbo = globalDynamicBufferMap[this._vertexAttribHash];
+        const ibo = globalDynamicBufferMap.indexBuffer;
+        assertIsTrue(!!vbo && !!ibo, 'Dynamic buffer not initialized');
+        const trails = this._particleTrail.values();
+        this._curTrailNum = 0;
+        for (const trail of trails) {
+            if (trail.start === -1) {
+                continue;
+            }
+            const end = trail.start >= trail.end ? trail.end + trail.trailElements.length : trail.end;
+            this._curTrailNum += (end - trail.start) + 2;
+        }
+        this._indexOffset = vbo.usedCount;
+        vbo.usedCount += this._curTrailNum * 2;
+        vbo.markDirty();
+        this._vbF32 = vbo.floatDataView.subarray(this._indexOffset * this._vertSize / 4, vbo.usedCount * this._vertSize / 4);
+        this._vbUint32 = vbo.uintDataView.subarray(this._indexOffset * this._vertSize / 4, vbo.usedCount * this._vertSize / 4);
+        this._firstIndex = ibo.usedCount;
+        ibo.usedCount += this._curTrailNum * 6;
+        ibo.markDirty();
+        this._iBuffer = ibo.uint16DataView.subarray(this._firstIndex, ibo.usedCount);
+    }
+
     public updateRenderData () {
+        this.ensureBuffer();
         this.vbOffset = 0;
         this.ibOffset = 0;
+        this.colorOverTrail.bake();
+        this.widthRatio.bake();
         for (const p of this._particleTrail.keys()) {
             const trailSeg = this._particleTrail.get(p)!;
             if (trailSeg.start === -1) {
                 continue;
             }
-            const indexOffset = this.vbOffset * 4 / this._vertSize;
+            const indexOffset = this.vbOffset * 4 / this._vertSize + this._indexOffset;
             const end = trailSeg.start >= trailSeg.end ? trailSeg.end + trailSeg.trailElements.length : trailSeg.end;
             const trailNum = end - trailSeg.start;
             // const lastSegRatio = vec3.distance(trailSeg.getTailElement()!.position, p.position) / this._minParticleDistance;
             const textCoordSeg = 1 / (trailNum /* - 1 + lastSegRatio */);
             const startSegEle = trailSeg.trailElements[trailSeg.start];
-            this._fillVertexBuffer(startSegEle, this.colorOverTrail.evaluate(1, 1), indexOffset, 1, 0, NEXT_TRIANGLE_INDEX);
+            this._fillVertexBuffer(startSegEle, this.colorOverTrail.evaluateOne(1, 1), indexOffset, 1, 0, NEXT_TRIANGLE_INDEX);
             for (let i = trailSeg.start + 1; i < end; i++) {
                 const segEle = trailSeg.trailElements[i % trailSeg.trailElements.length];
                 const j = i - trailSeg.start;
-                this._fillVertexBuffer(segEle, this.colorOverTrail.evaluate(1 - j / trailNum, 1),
+                this._fillVertexBuffer(segEle, this.colorOverTrail.evaluateOne(1 - j / trailNum, 1),
                     indexOffset, 1 - j * textCoordSeg, j, PRE_TRIANGLE_INDEX | NEXT_TRIANGLE_INDEX);
             }
             if (this._needTransform) {
-                Vec3.transformMat4(_temp_trailEle.position, p.position, _temp_xform);
+                Vec3.transformMat4(_temp_trailEle.position, p.position, this._psTransform);
             } else {
                 Vec3.copy(_temp_trailEle.position, p.position);
             }
@@ -598,27 +639,31 @@ export default class TrailModule {
                 this.vbOffset -= this._vertSize / 4 * 2;
                 this.ibOffset -= 6;
                 // _bcIdx = (_bcIdx - 6 + 9) % 9;  // <wireframe debug>
-                this._fillVertexBuffer(lastSecondTrail, this.colorOverTrail.evaluate(textCoordSeg, 1), indexOffset,
+                this._fillVertexBuffer(lastSecondTrail, this.colorOverTrail.evaluateOne(textCoordSeg, 1), indexOffset,
                     textCoordSeg, trailNum - 1, PRE_TRIANGLE_INDEX | NEXT_TRIANGLE_INDEX);
                 Vec3.subtract(_temp_trailEle.velocity, _temp_trailEle.position, lastSecondTrail.position);
                 Vec3.normalize(_temp_trailEle.velocity, _temp_trailEle.velocity);
                 this._checkDirectionReverse(_temp_trailEle, lastSecondTrail);
             }
             if (this.widthFromParticle) {
-                _temp_trailEle.width = p.size.x * this.widthRatio.evaluate(0, 1)!;
+                _temp_trailEle.width = p.size.x * this.widthRatio.evaluateOne(0, 1)!;
             } else {
-                _temp_trailEle.width = this.widthRatio.evaluate(0, 1)!;
+                _temp_trailEle.width = this.widthRatio.evaluateOne(0, 1)!;
             }
             _temp_trailEle.color = p.color;
 
             if (Vec3.equals(_temp_trailEle.velocity, Vec3.ZERO)) {
                 this.ibOffset -= 3;
             } else {
-                this._fillVertexBuffer(_temp_trailEle, this.colorOverTrail.evaluate(0, 1), indexOffset, 0, trailNum, PRE_TRIANGLE_INDEX);
+                this._fillVertexBuffer(_temp_trailEle, this.colorOverTrail.evaluateOne(0, 1), indexOffset, 0, trailNum, PRE_TRIANGLE_INDEX);
             }
         }
         if (this._trailModel) {
             this._trailModel.enabled = this.ibOffset > 0;
+        }
+        if (DEBUG) {
+            assertIsTrue(this.vbOffset <= this._vbF32!.length, 'vbOffset should not exceed the length of vbF32');
+            assertIsTrue(this.ibOffset <= this._iBuffer!.length, 'ibOffset should not exceed the length of iBuffer');
         }
     }
 
@@ -626,11 +671,12 @@ export default class TrailModule {
         const subModels = this._trailModel && this._trailModel.subModels;
         if (subModels && subModels.length > 0) {
             const subModel = subModels[0];
-            subModel.inputAssembler.vertexBuffers[0].update(this._vbF32!);
-            subModel.inputAssembler.indexBuffer!.update(this._iBuffer!);
-            this._iaInfo.drawInfos[0].firstIndex = 0;
-            this._iaInfo.drawInfos[0].indexCount = count;
-            this._iaInfoBuffer!.update(this._iaInfo);
+            // subModel.inputAssembler.vertexBuffers[0].update(this._vbF32!);
+            // subModel.inputAssembler.indexBuffer!.update(this._iBuffer!);
+            subModel.inputAssembler.firstIndex = this._firstIndex;
+            subModel.inputAssembler.indexCount = count;
+            subModel.inputAssembler.firstVertex = this._indexOffset;
+            subModel.inputAssembler.vertexCount = this._curTrailNum * 2;
         }
     }
 
@@ -648,37 +694,35 @@ export default class TrailModule {
 
     private rebuild () {
         const device: Device = director.root!.device;
-        const vertexBuffer = device.createBuffer(new BufferInfo(
-            BufferUsageBit.VERTEX | BufferUsageBit.TRANSFER_DST,
-            MemoryUsageBit.HOST | MemoryUsageBit.DEVICE,
-            this._vertSize * (this._trailNum + 1) * 2,
-            this._vertSize,
-        ));
-        const vBuffer: ArrayBuffer = new ArrayBuffer(this._vertSize * (this._trailNum + 1) * 2);
-        this._vbF32 = new Float32Array(vBuffer);
-        this._vbUint32 = new Uint32Array(vBuffer);
-        vertexBuffer.update(vBuffer);
+        if (!globalDynamicBufferMap[this._vertexAttribHash]) {
+            globalDynamicBufferMap[this._vertexAttribHash] = new DynamicBuffer(device, this._vertSize, BufferUsageBit.VERTEX | BufferUsageBit.TRANSFER_DST);
+        }
+        const vertexBuffer = globalDynamicBufferMap[this._vertexAttribHash].buffer;
+        // const vertexBuffer = device.createBuffer(new BufferInfo(
+        //     BufferUsageBit.VERTEX | BufferUsageBit.TRANSFER_DST,
+        //     MemoryUsageBit.HOST | MemoryUsageBit.DEVICE,
+        //     this._vertSize * (this._trailNum + 1) * 2,
+        //     this._vertSize,
+        // ));
+        // const vBuffer: ArrayBuffer = new ArrayBuffer(this._vertSize * (this._trailNum + 1) * 2);
+        // this._vbF32 = new Float32Array(vBuffer);
+        // this._vbUint32 = new Uint32Array(vBuffer);
+        // vertexBuffer.update(vBuffer);
 
-        const indexBuffer = device.createBuffer(new BufferInfo(
-            BufferUsageBit.INDEX | BufferUsageBit.TRANSFER_DST,
-            MemoryUsageBit.HOST | MemoryUsageBit.DEVICE,
-            Math.max(1, this._trailNum) * 6 * Uint16Array.BYTES_PER_ELEMENT,
-            Uint16Array.BYTES_PER_ELEMENT,
-        ));
-        this._iBuffer = new Uint16Array(Math.max(1, this._trailNum) * 6);
-        indexBuffer.update(this._iBuffer);
+        if (!globalDynamicBufferMap.indexBuffer) {
+            globalDynamicBufferMap.indexBuffer = new DynamicBuffer(device, Uint16Array.BYTES_PER_ELEMENT, BufferUsageBit.INDEX | BufferUsageBit.TRANSFER_DST);
+        }
+        const indexBuffer = globalDynamicBufferMap.indexBuffer.buffer;
+        // const indexBuffer = device.createBuffer(new BufferInfo(
+        //     BufferUsageBit.INDEX | BufferUsageBit.TRANSFER_DST,
+        //     MemoryUsageBit.HOST | MemoryUsageBit.DEVICE,
+        //     Math.max(1, this._trailNum) * 6 * Uint16Array.BYTES_PER_ELEMENT,
+        //     Uint16Array.BYTES_PER_ELEMENT,
+        // ));
+        // this._iBuffer = new Uint16Array(Math.max(1, this._trailNum) * 6);
+        // indexBuffer.update(this._iBuffer);
 
-        this._iaInfoBuffer = device.createBuffer(new BufferInfo(
-            BufferUsageBit.INDIRECT,
-            MemoryUsageBit.HOST | MemoryUsageBit.DEVICE,
-            DRAW_INFO_SIZE,
-            DRAW_INFO_SIZE,
-        ));
-        this._iaInfo.drawInfos[0].vertexCount = (this._trailNum + 1) * 2;
-        this._iaInfo.drawInfos[0].indexCount = this._trailNum * 6;
-        this._iaInfoBuffer.update(this._iaInfo);
-
-        this._subMeshData = new RenderingSubMesh([vertexBuffer], this._vertAttrs, PrimitiveMode.TRIANGLE_LIST, indexBuffer, this._iaInfoBuffer);
+        this._subMeshData = new RenderingSubMesh([vertexBuffer], this._vertAttrs, PrimitiveMode.TRIANGLE_LIST, indexBuffer);
 
         const trailModel = this._trailModel;
         if (trailModel && this._material) {
@@ -687,20 +731,29 @@ export default class TrailModule {
             trailModel.initSubModel(0, this._subMeshData, this._material);
             trailModel.enabled = true;
         }
+
+        // const subModels = this._trailModel && this._trailModel.subModels;
+        // if (subModels && subModels.length > 0) {
+        //     const subModel = subModels[0];
+        //     subModel.inputAssembler.vertexCount = (this._trailNum + 1) * 2;
+        //     subModel.inputAssembler.indexCount = this._trailNum * 6;
+        // }
     }
 
     private _updateTrailElement (module: any, trailEle: ITrailElement, p: Particle, dt: number): boolean {
         trailEle.lifetime += dt;
+        module.colorOvertime.bake();
+        module.widthRatio.bake();
         if (module.colorFromParticle) {
             trailEle.color.set(p.color);
-            trailEle.color.multiply(module.colorOvertime.evaluate(1.0 - p.remainingLifetime / p.startLifetime, 1));
+            trailEle.color.multiply(module.colorOvertime.evaluateOne(1.0 - p.remainingLifetime / p.startLifetime, 1));
         } else {
-            trailEle.color.set(module.colorOvertime.evaluate(1.0 - p.remainingLifetime / p.startLifetime, 1));
+            trailEle.color.set(module.colorOvertime.evaluateOne(1.0 - p.remainingLifetime / p.startLifetime, 1));
         }
         if (module.widthFromParticle) {
-            trailEle.width = p.size.x * module.widthRatio.evaluate(trailEle.lifetime / module._trailLifetime, 1)!;
+            trailEle.width = p.size.x * module.widthRatio.evaluateOne(trailEle.lifetime / module._trailLifetime, 1)!;
         } else {
-            trailEle.width = module.widthRatio.evaluate(trailEle.lifetime / module._trailLifetime, 1)!;
+            trailEle.width = module.widthRatio.evaluateOne(trailEle.lifetime / module._trailLifetime, 1)!;
         }
         return trailEle.lifetime > module._trailLifetime;
     }
@@ -761,7 +814,7 @@ export default class TrailModule {
 
     private destroySubMeshData () {
         if (this._subMeshData) {
-            this._subMeshData.destroy();
+            // this._subMeshData.destroy();
             this._subMeshData = null;
         }
     }

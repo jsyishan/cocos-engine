@@ -22,8 +22,6 @@
  THE SOFTWARE.
 */
 
-import { Billboard } from './billboard';
-import { Line } from './line';
 import { ParticleSystem } from './particle-system';
 import { ParticleUtils } from './particle-utils';
 import CurveRange from './animator/curve-range';
@@ -31,10 +29,9 @@ import { cclegacy } from '../core';
 import GradientRange from './animator/gradient-range';
 import Gradient, { AlphaKey, ColorKey } from './animator/gradient';
 import Burst from './burst';
+import { ForceFieldComp } from './animator/force-field-comp';
 
 export {
-    Billboard,
-    Line,
     ParticleSystem,
     ParticleUtils,
     CurveRange,
@@ -43,6 +40,7 @@ export {
     AlphaKey,
     ColorKey,
     Burst,
+    ForceFieldComp,
 };
 
 export * from './deprecated';

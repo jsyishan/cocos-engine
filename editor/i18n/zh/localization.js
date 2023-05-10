@@ -1022,6 +1022,22 @@ module.exports = {
             label: "WebSocket Server",
             description: "对原生启用 WebSocket Server。注意: 必须同时启用 WebSocket。",
         },
+        lights: {
+            label: "灯光",
+            description: "灯光",
+        },
+        particle_billboard: {
+            label: "Billboard 组件",
+            description: "Billboard 组件用于渲染一个始终面向摄像机的方块",
+        },
+        particle_line: {
+            label: "Line 组件",
+            description: "Line 组件用于渲染 3D 场景中给定的点连成的线段。Line 组件渲染的线段是有宽度的，并且总是面向摄像机，这与 billboard 组件相似",
+        },
+        skinned_mesh_renderer: {
+            label: "蒙皮网格渲染器组件（SkinnedMeshRenderer）",
+            description: "蒙皮网格渲染器组件",
+        },
     },
     renderable_2d: {
         srcBlendFactor: '指定源的混合模式，这会克隆一个新的材质对象，注意这带来的性能和内存损耗',

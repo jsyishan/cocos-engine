@@ -22,6 +22,8 @@ declare module 'pal/screen-adapter' {
          * Determine whether use headless renderer, which means do not support some screen operations.
          */
         isHeadlessMode: boolean;
+
+        overrideDpr?: number;
     }
 
     class ScreenAdapter {

@@ -449,6 +449,7 @@ export default class ShapeModule {
         if (this.arcMode === ArcMode.Random) {
             return randomRange(0, this._arc);
         }
+        this.arcSpeed.bake();
         let angle = this.totalAngle + 2 * Math.PI * this.arcSpeed.evaluate(this.particleSystem._time, 1)! * (this.particleSystem._time - this.lastTime);
         this.totalAngle = angle;
         if (this.arcSpread !== 0) {

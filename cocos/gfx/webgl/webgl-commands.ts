@@ -2410,8 +2410,8 @@ export function WebGLCmdFuncBindStates (
 
                             gl.enableVertexAttribArray(glLoc);
                             cache.glCurrentAttribLocs[glLoc] = true;
-
-                            gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset);
+                            const instOffset = glAttrib.isInstanced ? cache.drawInfo.firstInstance * glAttrib.stride : 0;
+                            gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset + instOffset);
                             if (ia) { ia.vertexAttribDivisorANGLE(glLoc, glAttrib.isInstanced ? 1 : 0); }
                         }
                     }
@@ -2468,7 +2468,8 @@ export function WebGLCmdFuncBindStates (
                         }
                         cache.glCurrentAttribLocs[glLoc] = true;
 
-                        gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset);
+                        const instOffset = glAttrib.isInstanced ? cache.drawInfo.firstInstance * glAttrib.stride : 0;
+                        gl.vertexAttribPointer(glLoc, glAttrib.count, glAttrib.glType, glAttrib.isNormalized, glAttrib.stride, attribOffset + instOffset);
                         if (ia) { ia.vertexAttribDivisorANGLE(glLoc, glAttrib.isInstanced ? 1 : 0); }
                     }
                 }

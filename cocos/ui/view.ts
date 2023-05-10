@@ -133,8 +133,10 @@ export class View extends Eventify(System) {
             this.resizeWithBrowserSize(true);
             const designResolution = settings.querySettings(Settings.Category.SCREEN, 'designResolution');
             if (designResolution) {
+                console.time('phase 9.1.2.1');
                 this.setDesignResolutionSize(Number(designResolution.width), Number(designResolution.height),
                     designResolution.policy || ResolutionPolicy.FIXED_HEIGHT);
+                console.timeEnd('phase 9.1.2.1');
             }
         }
 
@@ -657,8 +659,12 @@ class ContainerStrategy {
         const locCanvas = cclegacy.game.canvas;
         if (locCanvas) {
             const windowSize = screen.windowSize;
-            locCanvas.width = windowSize.width;
-            locCanvas.height = windowSize.height;
+            if (locCanvas.width !== windowSize.width) {
+                locCanvas.width = windowSize.width;
+            }
+            if (locCanvas.height !== windowSize.height) {
+                locCanvas.height = windowSize.height;
+            }
         }
     }
 }

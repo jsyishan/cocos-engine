@@ -7,10 +7,13 @@ const REGEX = /^https?:\/\/.*/;
 const downloader = cc.assetManager.downloader;
 const parser = cc.assetManager.parser;
 const presets = cc.assetManager.presets;
-downloader.maxConcurrency = 8;
+downloader.maxConcurrency = 36;
 downloader.maxRequestsPerFrame = 64;
 presets.scene.maxConcurrency = 10;
 presets.scene.maxRequestsPerFrame = 64;
+
+// 根目录路径
+let customRootURL = '';
 
 const subpackages = {};
 
@@ -26,11 +29,7 @@ function downloadScript (url, options, onComplete) {
     if (REGEX.test(url)) {
         onComplete && onComplete(new Error('Can not load remote scripts'));
     } else {
-        if (sys.platform === sys.Platform.TAOBAO_MINI_GAME) {
-            require(`../../../${url}`);
-        } else if (sys.platform !== sys.Platform.TAOBAO_CREATIVE_APP) { //Can't load scripts dynamically on Taobao platform
-            require(`../../../${url}`);
-        }
+        require(`../../../${url}`);
         onComplete && onComplete(null);
     }
 }
@@ -154,13 +153,14 @@ function loadFont (url, options, onComplete) {
 }
 
 function doNothing (content, options, onComplete) {
-    exists(content, (existence) => {
-        if (existence) {
-            onComplete(null, content);
-        } else {
-            onComplete(new Error(`file ${content} does not exist!`));
-        }
-    });
+    // exists(content, (existence) => {
+    //     if (existence) {
+    //         onComplete(null, content);
+    //     } else {
+    //         onComplete(new Error(`file ${content} does not exist!`));
+    //     }
+    // });
+    onComplete(null, content);
 }
 
 function downloadAsset (url, options, onComplete) {
@@ -212,32 +212,15 @@ function downloadBundle (nameOrUrl, options, onComplete) {
     const version = options.version || cc.assetManager.downloader.bundleVers[bundleName];
     const suffix = version ? `${version}.` : '';
 
-    function getConfigPathForSubPackage () {
-        if (sys.platform === sys.Platform.TAOBAO_MINI_GAME) {
-            return `${bundleName}/config.${suffix}json`;
-        }
-        return `subpackages/${bundleName}/config.${suffix}json`;
-    }
-
-    function appendBaseToJsonData (data) {
-        if (!data) return;
-
-        if (sys.platform === sys.Platform.TAOBAO_MINI_GAME) {
-            data.base = `${bundleName}/`;
-        } else {
-            data.base = `subpackages/${bundleName}/`;
-        }
-    }
-
     if (subpackages[bundleName]) {
-        const config = getConfigPathForSubPackage();
+        var config = `subpackages/${bundleName}/config.${suffix}json`;
         loadSubpackage(bundleName, options.onFileProgress, (err) => {
             if (err) {
                 onComplete(err, null);
                 return;
             }
             downloadJson(config, options, (err, data) => {
-                appendBaseToJsonData(data);
+                data && (data.base = `subpackages/${bundleName}/`);
                 onComplete(err, data);
             });
         });
@@ -248,21 +231,16 @@ function downloadBundle (nameOrUrl, options, onComplete) {
             js = `src/bundle-scripts/${bundleName}/index.${suffix}js`;
             cacheManager.makeBundleFolder(bundleName);
         } else if (downloader.remoteBundles.indexOf(bundleName) !== -1) {
-            url = `${downloader.remoteServerAddress}remote/${bundleName}`;
-            js = `src/bundle-scripts/${bundleName}/index.${suffix}js`;
-            cacheManager.makeBundleFolder(bundleName);
-        } else {
-            url = `assets/${bundleName}`;
-            js = `assets/${bundleName}/index.${suffix}js`;
-        }
-
-        if (sys.platform === sys.Platform.TAOBAO_MINI_GAME) {
-            require(js);
-        } else if (sys.platform !== sys.Platform.TAOBAO_CREATIVE_APP) { // Can't load scripts dynamically on Taobao platform
-            require(`./${js}`);
-        }
+                url = `${downloader.remoteServerAddress}remote/${bundleName}`;
+                js = `src/bundle-scripts/${bundleName}/index.${suffix}js`;
+                cacheManager.makeBundleFolder(bundleName);
+            } else {
+                url = `${customRootURL}assets/${bundleName}`;
+                js = `assets/${bundleName}/index.${suffix}js`;
+            }
+        require(`./${js}`);
         options.__cacheBundleRoot__ = bundleName;
-        const config = `${url}/config.${suffix}json`;
+        var config = `${url}/config.${suffix}json`;
         downloadJson(config, options, (err, data) => {
             if (err) {
                 onComplete && onComplete(err);
@@ -279,6 +257,7 @@ function downloadBundle (nameOrUrl, options, onComplete) {
                     data.base = `${unzipPath}/res/`;
                     // PATCH: for android alipay version before v10.1.95 (v10.1.95 included)
                     // to remove in the future
+                    const sys = cc.sys;
                     if (sys.platform === sys.Platform.ALIPAY_MINI_GAME && sys.os === sys.OS.ANDROID) {
                         const resPath = `${unzipPath}res/`;
                         if (fs.accessSync({ path: resPath })) {
@@ -399,16 +378,32 @@ downloader.register({
     default: downloadText,
 });
 
+function loadImage (url, options, onComplete)  {
+    readArrayBuffer(url, (err, data) => {
+        if (err) {
+            onComplete && onComplete(err);
+            return;
+        }
+        const blob = new Blob([data]);
+        const blobUrl = URL.createObjectURL(blob);
+        const image = document.createElement('img');
+        image.onload = function () {
+            image.onload = null;
+            image.onerror = null;
+            URL.revokeObjectURL(blobUrl);
+            onComplete && onComplete(null, image);
+          };
+
+        image.onerror = function (e) {
+            image.onload = null;
+            image.onerror = null;
+            onComplete && onComplete(e, null);
+          };
+        image.src = blobUrl;
+    });
+}
+
 parser.register({
-    '.png': downloader.downloadDomImage,
-    '.jpg': downloader.downloadDomImage,
-    '.bmp': downloader.downloadDomImage,
-    '.jpeg': downloader.downloadDomImage,
-    '.gif': downloader.downloadDomImage,
-    '.ico': downloader.downloadDomImage,
-    '.tiff': downloader.downloadDomImage,
-    '.image': downloader.downloadDomImage,
-    '.webp': downloader.downloadDomImage,
     '.pvr': parsePVRTex,
     '.pkm': parsePKMTex,
     '.astc': parseASTCTex,
@@ -491,8 +486,40 @@ cc.assetManager.transformPipeline.append((task) => {
     }
 });
 
+function registerImageParser () {
+    const loadImageByBlob = cc.settings.querySettings('custom', 'loadImageByBlob') || false;
+    console.log('load asset by blob: ', loadImageByBlob);
+    if (loadImageByBlob) {
+        parser.register({
+            '.png': loadImage,
+            '.jpg': loadImage,
+            '.bmp': loadImage,
+            '.jpeg': loadImage,
+            '.gif': loadImage,
+            '.ico': loadImage,
+            '.tiff': loadImage,
+            '.image': loadImage,
+            '.webp': loadImage,
+        });
+    } else {
+        parser.register({
+            '.png': downloader.downloadDomImage,
+            '.jpg': downloader.downloadDomImage,
+            '.bmp': downloader.downloadDomImage,
+            '.jpeg': downloader.downloadDomImage,
+            '.gif': downloader.downloadDomImage,
+            '.ico': downloader.downloadDomImage,
+            '.tiff': downloader.downloadDomImage,
+            '.image': downloader.downloadDomImage,
+            '.webp': downloader.downloadDomImage,
+        });
+    }
+}
+
 const originInit = cc.assetManager.init;
 cc.assetManager.init = function (options) {
+    registerImageParser();
+    customRootURL = cc.settings.querySettings('custom', 'rootURL') || '';
     originInit.call(cc.assetManager, options);
     const subpacks = cc.settings.querySettings('assets', 'subpackages');
     subpacks && subpacks.forEach((x) => subpackages[x] = `subpackages/${x}`);

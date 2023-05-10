@@ -25,6 +25,7 @@
 
 import { XIAOMI } from 'internal:constants';
 import { getError } from '../../core';
+import { settings } from '../settings';
 import { ccwindow } from '../../core/global-exports';
 
 export default function downloadDomImage (
@@ -34,12 +35,20 @@ export default function downloadDomImage (
 ): HTMLImageElement {
     const img = new ccwindow.Image();
 
+    // support for remote image loading
+    const prefixServer = settings.querySettings('custom', 'prefixServer') || '';
+    if (prefixServer) {
+        url = `${prefixServer}${url}`;
+    }
+
     // NOTE: on xiaomi platform, we need to force setting img.crossOrigin as 'anonymous'
     if (ccwindow.location.protocol !== 'file:' || XIAOMI) {
         img.crossOrigin = 'anonymous';
     }
 
+    console.time(`phase downloadDomImage ${url}`);
     function loadCallback () {
+        console.timeEnd(`phase downloadDomImage ${url}`);
         img.removeEventListener('load', loadCallback);
         img.removeEventListener('error', errorCallback);
         if (onComplete) { onComplete(null, img); }

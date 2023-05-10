@@ -23,7 +23,7 @@
 */
 
 import { ccclass, tooltip, displayOrder, type, formerlySerializedAs, serializable, range } from 'cc.decorator';
-import { lerp, pseudoRandom, repeat, Enum } from '../../core';
+import { lerp, pseudoRandom, random, repeat, Enum } from '../../core';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import CurveRange from './curve-range';
 import { ModuleRandSeed } from '../enum';
@@ -256,6 +256,16 @@ export default class TextureAnimationModule extends ParticleModuleBase {
 
     public name = PARTICLE_MODULE_NAME.TEXTURE;
 
+    constructor () {
+        super();
+        this.needUpdate = true;
+    }
+
+    public update (ps, space, worldTransform) {
+        this.startFrame.bake();
+        this.frameOverTime.bake();
+    }
+
     /**
      * @en Init start row to particle.
      * @zh 给粒子创建初始行属性。
@@ -263,7 +273,7 @@ export default class TextureAnimationModule extends ParticleModuleBase {
      * @internal
      */
     public init (p: Particle) {
-        p.startRow = Math.floor(Math.random() * this.numTilesY);
+        p.startRow = Math.floor(random() * this.numTilesY);
     }
 
     /**
@@ -275,22 +285,21 @@ export default class TextureAnimationModule extends ParticleModuleBase {
      */
     public animate (p: Particle, dt: number) {
         const normalizedTime = 1 - p.remainingLifetime / p.startLifetime;
-        const randStart = isCurveTwoValues(this.startFrame) ? pseudoRandom(p.randomSeed + TEXTURE_ANIMATION_RAND_OFFSET) : 0;
-        const randFrame = isCurveTwoValues(this.frameOverTime) ? pseudoRandom(p.randomSeed + TEXTURE_ANIMATION_RAND_OFFSET) : 0;
-        const startFrame = this.startFrame.evaluate(normalizedTime, randStart)! / (this.numTilesX * this.numTilesY);
+        const rndSeed = pseudoRandom(p.randomSeed + TEXTURE_ANIMATION_RAND_OFFSET);
+        const startFrame = this.startFrame.evaluate(normalizedTime, rndSeed)! / (this.numTilesX * this.numTilesY);
         if (this.animation === Animation.WholeSheet) {
-            p.frameIndex = repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, randFrame)! + startFrame), 1);
+            p.frameIndex = repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, rndSeed)! + startFrame), 1);
         } else if (this.animation === Animation.SingleRow) {
             const rowLength = 1 / this.numTilesY;
             if (this.randomRow) {
-                const f = repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, randFrame)! + startFrame), 1);
+                const f = repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, rndSeed)! + startFrame), 1);
                 const from = p.startRow * rowLength;
                 const to = from + rowLength;
                 p.frameIndex = lerp(from, to, f);
             } else {
                 const from = this.rowIndex * rowLength;
                 const to = from + rowLength;
-                p.frameIndex = lerp(from, to, repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, randFrame)! + startFrame), 1));
+                p.frameIndex = lerp(from, to, repeat(this.cycleCount * (this.frameOverTime.evaluate(normalizedTime, rndSeed)! + startFrame), 1));
             }
         }
     }

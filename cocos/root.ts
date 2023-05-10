@@ -39,6 +39,7 @@ import { Batcher2D } from './2d/renderer/batcher-2d';
 import { IPipelineEvent } from './rendering/pipeline-event';
 import { localDescriptorSetLayout_ResizeMaxJoints, UBOCamera, UBOGlobal, UBOLocal, UBOShadow, UBOWorldBound } from './rendering/define';
 import { XREye, XRPoseType } from './xr/xr-enums';
+import legacyCC from '../predefine';
 
 /**
  * @en Initialization information for the Root
@@ -497,6 +498,39 @@ export class Root {
             this._frameMoveProcess();
             this._frameMoveEnd();
         }
+
+        const windows = this._windows;
+        const cameraList: Camera[] = [];
+        for (let i = 0; i < windows.length; i++) {
+            const window = windows[i];
+            window.extractRenderCameras(cameraList);
+        }
+
+        if (this._pipeline && cameraList.length > 0) {
+            this._device.acquire([deviceManager.swapchain]);
+            const scenes = this._scenes;
+            const stamp = legacyCC.director.getTotalFrames();
+            if (this._batcher) {
+                this._batcher.update();
+                this._batcher.uploadBuffers();
+            }
+
+            for (let i = 0; i < scenes.length; i++) {
+                scenes[i].update(stamp);
+            }
+
+            legacyCC.director.emit(legacyCC.Director.EVENT_BEFORE_COMMIT);
+            legacyCC.director.emit(legacyCC.Director.EVENT_UPLOAD_DYNAMIC_VBO);
+            cameraList.sort((a: Camera, b: Camera) => a.priority - b.priority);
+
+            for (let i = 0; i < cameraList.length; ++i) {
+                cameraList[i].geometryRenderer?.update();
+            }
+            this._pipeline.render(cameraList);
+            this._device.present();
+        }
+
+        if (this._batcher) this._batcher.reset();
     }
 
     /**

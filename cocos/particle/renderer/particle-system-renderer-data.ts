@@ -301,7 +301,8 @@ export default class ParticleSystemRenderer {
         this.create(ps);
         const useGPU = this._useGPU && isSupportGPUParticle();
         if (!this._particleSystem.processor) {
-            this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+            // this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+            this._particleSystem.processor = new ParticleSystemRendererCPU(this);
             this._particleSystem.processor.updateAlignSpace(this.alignSpace);
             this._particleSystem.processor.onInit(ps);
         } else {
@@ -334,7 +335,8 @@ export default class ParticleSystemRenderer {
         if (useGPU && this.gpuMaterial) {
             this.particleMaterial = this.gpuMaterial;
         }
-        this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+        // this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+        this._particleSystem.processor = new ParticleSystemRendererCPU(this);
         this._particleSystem.processor.updateAlignSpace(this.alignSpace);
         this._particleSystem.processor.onInit(this._particleSystem);
         this._particleSystem.processor.onEnable();

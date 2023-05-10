@@ -22,9 +22,10 @@
  THE SOFTWARE.
 */
 
-import { Color, Vec3, Mat4, Quat } from '../core';
+import { Color, Vec3, Mat4, Quat, Vec4 } from '../core';
 import { ParticleSystem } from './particle-system';
 import { IParticleSystemRenderer } from './renderer/particle-system-renderer-base';
+import { SubBurst } from './burst';
 
 export class Particle {
     public static INDENTIFY_NEG_QUAT = 10;
@@ -36,28 +37,36 @@ export class Particle {
     public animatedVelocity: Vec3;
     public ultimateVelocity: Vec3;
     public angularVelocity: Vec3;
-    public axisOfRotation: Vec3;
+    public initialVelocity: Vec3;
     public rotation: Vec3;
     public startEuler: Vec3;
     public startRotation: Quat;
     public startRotated: boolean;
     public deltaQuat: Quat;
-    public deltaMat: Mat4;
-    public localMat: Mat4;
+    public localQuat: Quat;
     public startSize: Vec3;
     public size: Vec3;
+    public animatedSize: Vec3;
     public startColor: Color;
     public color: Color;
+    public animatedColor: Color;
+    public custom1: Vec4;
+    public custom2: Vec4;
     public randomSeed: number; // uint
     public remainingLifetime: number;
     public loopCount: number;
     public lastLoop: number;
     public trailDelay: number;
     public startLifetime: number;
-    public emitAccumulator0: number;
-    public emitAccumulator1: number;
     public frameIndex: number;
     public startRow: number;
+    public active: boolean;
+    public parentParticle: Particle | null;
+    public dir: Quat;
+    public time: number;
+    public timeCounter: number;
+    public distanceCounter: number;
+    public bursts: SubBurst[];
 
     constructor (particleSystem: any) {
         this.particleSystem = particleSystem;
@@ -66,28 +75,36 @@ export class Particle {
         this.animatedVelocity = new Vec3(0, 0, 0);
         this.ultimateVelocity = new Vec3(0, 0, 0);
         this.angularVelocity = new Vec3(0, 0, 0);
-        this.axisOfRotation = new Vec3(0, 0, 0);
+        this.initialVelocity = new Vec3(0, 0, 0);
         this.rotation = new Vec3(0, 0, 0);
         this.startEuler = new Vec3(0, 0, 0);
         this.startRotation = new Quat();
         this.startRotated = false;
         this.deltaQuat = new Quat();
-        this.deltaMat = new Mat4();
-        this.localMat = new Mat4();
+        this.localQuat = new Quat();
         this.startSize = new Vec3(0, 0, 0);
         this.size = new Vec3(0, 0, 0);
+        this.animatedSize = new Vec3(1, 1, 1);
         this.startColor = Color.WHITE.clone();
         this.color = Color.WHITE.clone();
+        this.animatedColor = Color.WHITE.clone();
+        this.custom1 = new Vec4();
+        this.custom2 = new Vec4();
         this.randomSeed = 0; // uint
         this.remainingLifetime = 0.0;
         this.loopCount = 0;
         this.lastLoop = 0;
         this.trailDelay = 0;
         this.startLifetime = 0.0;
-        this.emitAccumulator0 = 0.0;
-        this.emitAccumulator1 = 0.0;
         this.frameIndex = 0.0;
         this.startRow = 0;
+        this.active = false;
+        this.parentParticle = null;
+        this.dir = new Quat();
+        this.time = 0;
+        this.timeCounter = 0;
+        this.distanceCounter = 0;
+        this.bursts = [];
     }
 
     public reset () {
@@ -96,8 +113,18 @@ export class Particle {
         this.startRotation.set(0, 0, 0, 1);
         this.startRotated = false;
         this.deltaQuat.set(0, 0, 0, 1);
-        this.deltaMat.identity();
-        this.localMat.identity();
+        this.localQuat.set(0, 0, 0, 1);
+        this.parentParticle = null;
+        this.initialVelocity.set(0, 0, 0);
+        this.dir.set(Quat.IDENTITY);
+        this.time = 0;
+        this.timeCounter = 0;
+        this.distanceCounter = 0;
+        this.custom1.set(0, 0, 0, 0);
+        this.custom2.set(0, 0, 0, 0);
+        this.animatedSize = new Vec3(1, 1, 1);
+        this.animatedColor.set(255, 255, 255, 255);
+        this.bursts = [];
     }
 }
 
@@ -110,6 +137,12 @@ export const PARTICLE_MODULE_NAME = {
     VELOCITY: 'velocityModule',
     TEXTURE: 'textureModule',
     NOISE: 'noiseModule',
+    FORCEFIELD: 'forcefieldModule',
+    INHERIT: 'inheritVelocityModule',
+    CUSTOM: 'customDataModule',
+    ROTATIONSPEED: 'rotationSpeedModule',
+    SIZESPEED: 'sizeSpeedModule',
+    COLORSPEED: 'colorSpeedModule',
 };
 
 export const PARTICLE_MODULE_ORDER = [
@@ -121,6 +154,12 @@ export const PARTICLE_MODULE_ORDER = [
     'rotationModule',
     'textureModule',
     'noiseModule',
+    'forcefieldModule',
+    'inheritVelocityModule',
+    'customDataModule',
+    'rotationSpeedModule',
+    'sizeSpeedModule',
+    'colorSpeedModule',
 ];
 
 export const PARTICLE_MODULE_PROPERTY = [
@@ -134,6 +173,12 @@ export const PARTICLE_MODULE_PROPERTY = [
     '_textureAnimationModule',
     '_noiseModule',
     '_trailModule',
+    '_forcefieldModule',
+    '_inheritVelocityModule',
+    '_customDataModule',
+    '_rotationSpeedModule',
+    '_sizeSpeedModule',
+    '_colorSpeedModule',
 ];
 
 export interface IParticleModule {
@@ -142,7 +187,7 @@ export interface IParticleModule {
     needAnimate: boolean;
     name: string;
     bindTarget (target: any): void;
-    update (space: number, trans: Mat4): void;
+    update (ps: ParticleSystem, space: number, trans: Mat4): void;
     animate (p: Particle, dt?: number): void;
 }
 
@@ -155,7 +200,7 @@ export abstract class ParticleModuleBase implements IParticleModule {
         this.target = target;
     }
 
-    public update (space: number, trans: Mat4) {}
+    public update (ps: ParticleSystem, space: number, trans: Mat4) {}
     public abstract name: string;
     public abstract animate (p: Particle, dt?: number): void;
 }

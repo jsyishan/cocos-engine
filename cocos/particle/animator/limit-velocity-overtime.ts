@@ -28,11 +28,15 @@ import { Space, ModuleRandSeed } from '../enum';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import CurveRange from './curve-range';
 import { calculateTransform, isCurveTwoValues } from '../particle-general-function';
+import { CCBoolean, CCFloat } from '../../core';
+import { ParticleSystem } from '../particle-system';
 
 const LIMIT_VELOCITY_RAND_OFFSET = ModuleRandSeed.LIMIT;
+const LIMIT_DRAG_RAND_OFFSET = LIMIT_VELOCITY_RAND_OFFSET + 1;
 
-const _temp_v3 = new Vec3();
-const _temp_v3_1 = new Vec3();
+const animatedVelocity = new Vec3();
+const magVel = new Vec3();
+const normalizedVel = new Vec3();
 
 /**
  * @en
@@ -144,17 +148,35 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
     @tooltip('i18n:limitVelocityOvertimeModule.space')
     public space = Space.Local;
 
-    // TODO:functions related to drag are temporarily not supported
-    public drag = null;
+    @type(CurveRange)
+    @serializable
+    @displayOrder(8)
+    public drag = new CurveRange();
+
+    @type(CCFloat)
+    @serializable
+    @displayOrder(9)
+    public sizeFactor = 1.0;
+
+    @type(CCBoolean)
+    @serializable
+    @displayOrder(10)
     public multiplyDragByParticleSize = false;
+
+    @type(CCBoolean)
+    @serializable
+    @displayOrder(11)
     public multiplyDragByParticleVelocity = false;
+
     public name = PARTICLE_MODULE_NAME.LIMIT;
     private rotation: Quat;
+    private invRot: Quat;
     private needTransform: boolean;
 
     constructor () {
         super();
         this.rotation = new Quat();
+        this.invRot = new Quat();
         this.needTransform = false;
         this.needUpdate = true;
     }
@@ -166,8 +188,35 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      * @param worldTransform @en Particle system world transform @zh 粒子系统的世界变换矩阵
      * @internal
      */
-    public update (space: number, worldTransform: Mat4) {
-        this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
+    public update (ps:ParticleSystem, space: number, worldTransform: Mat4) {
+        // this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
+        this.drag.bake();
+        this.limitX.bake();
+        this.limitY.bake();
+        this.limitZ.bake();
+        this.limit.bake();
+    }
+
+    private applyDrag (p: Particle, dt: number, velNormalized: Vec3, velMag: number) {
+        if (this.drag.getMaxAbs() === 0.0) {
+            return;
+        }
+        const normalizedTime = 1 - p.remainingLifetime / p.startLifetime;
+        const dragCoefficient = this.drag.evaluate(normalizedTime, pseudoRandom(p.randomSeed + LIMIT_DRAG_RAND_OFFSET));
+        let maxDimension = p.size.x > p.size.y ? p.size.x : p.size.y;
+        maxDimension = maxDimension > p.size.z ? maxDimension : p.size.z;
+        maxDimension *= 0.5;
+        maxDimension *= this.sizeFactor;
+        const circleArea = (Math.PI * maxDimension * maxDimension);
+
+        let dragN = dragCoefficient;
+        dragN *= this.multiplyDragByParticleSize ? circleArea : 1.0;
+        dragN *= this.multiplyDragByParticleVelocity ? velMag * velMag : 1.0;
+
+        let mag = velMag - dragN * dt;
+        mag = mag < 0 ? 0 : mag;
+
+        Vec3.multiplyScalar(magVel, velNormalized, mag);
     }
 
     /**
@@ -179,30 +228,49 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      */
     public animate (p: Particle, dt: number) {
         const normalizedTime = 1 - p.remainingLifetime / p.startLifetime;
-        const dampedVel = _temp_v3;
+
+        animatedVelocity.set(p.animatedVelocity);
+        Vec3.add(magVel, p.velocity, animatedVelocity);
+
         if (this.separateAxes) {
-            const randX = isCurveTwoValues(this.limitX) ? pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET) : 0;
-            const randY = isCurveTwoValues(this.limitY) ? pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET) : 0;
-            const randZ = isCurveTwoValues(this.limitZ) ? pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET) : 0;
-            Vec3.set(_temp_v3_1,
-                this.limitX.evaluate(normalizedTime, randX)!,
-                this.limitY.evaluate(normalizedTime, randY)!,
-                this.limitZ.evaluate(normalizedTime, randZ)!);
+            const rndSeed = pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET);
+            const limitX = this.limitX.evaluate(normalizedTime, rndSeed);
+            const limitY = this.limitY.evaluate(normalizedTime, rndSeed);
+            const limitZ = this.limitZ.evaluate(normalizedTime, rndSeed);
+
             if (this.needTransform) {
-                Vec3.transformQuat(_temp_v3_1, _temp_v3_1, this.rotation);
+                Vec3.transformQuat(magVel, magVel, this.rotation);
             }
-            Vec3.set(dampedVel,
-                dampenBeyondLimit(p.ultimateVelocity.x, _temp_v3_1.x, this.dampen),
-                dampenBeyondLimit(p.ultimateVelocity.y, _temp_v3_1.y, this.dampen),
-                dampenBeyondLimit(p.ultimateVelocity.z, _temp_v3_1.z, this.dampen));
+            Vec3.set(magVel,
+                dampenBeyondLimit(magVel.x, limitX, this.dampen),
+                dampenBeyondLimit(magVel.y, limitY, this.dampen),
+                dampenBeyondLimit(magVel.z, limitZ, this.dampen));
+
+            Vec3.normalize(normalizedVel, magVel);
+            const velLen = magVel.length();
+            this.applyDrag(p, dt, normalizedVel, velLen);
+
+            Vec3.subtract(magVel, magVel, animatedVelocity);
+
+            if (this.needTransform) {
+                Quat.invert(this.invRot, this.rotation);
+                Vec3.transformQuat(magVel, magVel, this.invRot);
+            }
         } else {
-            Vec3.normalize(dampedVel, p.ultimateVelocity);
-            const rand = isCurveTwoValues(this.limit) ? pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET) : 0;
-            Vec3.multiplyScalar(dampedVel, dampedVel,
-                dampenBeyondLimit(p.ultimateVelocity.length(), this.limit.evaluate(normalizedTime, rand)!, this.dampen));
+            const lmt = this.limit.evaluate(normalizedTime, pseudoRandom(p.randomSeed + LIMIT_VELOCITY_RAND_OFFSET));
+            let velLen = magVel.length();
+            Vec3.normalize(normalizedVel, magVel);
+
+            const damped = dampenBeyondLimit(velLen, lmt, this.dampen);
+            Vec3.multiplyScalar(magVel, normalizedVel, damped);
+
+            Vec3.normalize(normalizedVel, magVel);
+            velLen = magVel.length();
+            this.applyDrag(p, dt, normalizedVel, velLen);
+
+            Vec3.subtract(magVel, magVel, animatedVelocity);
         }
-        Vec3.copy(p.ultimateVelocity, dampedVel);
-        Vec3.copy(p.velocity, p.ultimateVelocity);
+        p.velocity.set(magVel);
     }
 }
 

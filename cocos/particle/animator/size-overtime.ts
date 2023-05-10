@@ -120,6 +120,18 @@ export default class SizeOvertimeModule extends ParticleModuleBase {
 
     public name = PARTICLE_MODULE_NAME.SIZE;
 
+    constructor () {
+        super();
+        this.needUpdate = true;
+    }
+
+    public update (ps, space, worldTransform) {
+        this.x.bake();
+        this.y.bake();
+        this.z.bake();
+        this.size.bake();
+    }
+
     /**
      * @en Apply size animation to particle.
      * @zh 应用大小变换到粒子上。
