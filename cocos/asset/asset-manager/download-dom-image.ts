@@ -25,7 +25,7 @@
 
 import { XIAOMI } from 'internal:constants';
 import { getError } from '../../core';
-import { settings } from '../settings';
+import { settings } from '../../core/settings';
 import { ccwindow } from '../../core/global-exports';
 
 export default function downloadDomImage (

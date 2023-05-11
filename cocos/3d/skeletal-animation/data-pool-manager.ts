@@ -23,7 +23,7 @@
 */
 
 import type { AnimationClip } from '../../animation/animation-clip';
-import type { Skeleton } from '../assets';
+import type { Skeleton } from '../assets/skeleton';
 import { Device } from '../../gfx';
 import { JointAnimationInfo, JointTexturePool } from './skeletal-animation-utils';
 import { cclegacy } from '../../core';

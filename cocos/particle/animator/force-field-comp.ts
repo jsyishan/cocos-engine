@@ -26,7 +26,8 @@
 import { ccclass, displayOrder, executeInEditMode, executionOrder, menu, serializable, type } from '../../core/data/decorators';
 import CurveRange from './curve-range';
 import ForceField from './force-field';
-import { Component, Mat4 } from '../../core';
+import { Component } from '../../scene-graph/component';
+import { Mat4 } from '../../core/math';
 import { ShapeType } from '../enum';
 import { forceFieldManager } from '../force-field-manager';
 

@@ -23,12 +23,11 @@
 */
 
 import { ccclass, tooltip, displayOrder, range, type, serializable, visible } from 'cc.decorator';
-import { lerp, pseudoRandom, Vec3, Mat4, Quat } from '../../core';
+import { lerp, pseudoRandom, Vec3, Mat4, Quat, CCBoolean, CCFloat } from '../../core';
 import { Space, ModuleRandSeed } from '../enum';
 import { Particle, ParticleModuleBase, PARTICLE_MODULE_NAME } from '../particle';
 import CurveRange from './curve-range';
 import { calculateTransform, isCurveTwoValues } from '../particle-general-function';
-import { CCBoolean, CCFloat } from '../../core';
 import { ParticleSystem } from '../particle-system';
 
 const LIMIT_VELOCITY_RAND_OFFSET = ModuleRandSeed.LIMIT;
@@ -188,7 +187,7 @@ export default class LimitVelocityOvertimeModule extends ParticleModuleBase {
      * @param worldTransform @en Particle system world transform @zh 粒子系统的世界变换矩阵
      * @internal
      */
-    public update (ps:ParticleSystem, space: number, worldTransform: Mat4) {
+    public update (ps: ParticleSystem, space: number, worldTransform: Mat4) {
         // this.needTransform = calculateTransform(space, this.space, worldTransform, this.rotation);
         this.drag.bake();
         this.limitX.bake();

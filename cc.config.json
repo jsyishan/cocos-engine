@@ -193,7 +193,7 @@
         "lights": { "modules": ["lights"] },
         "particle-billboard": { "modules": ["particle-billboard"] },
         "particle-line": { "modules": ["particle-line"] },
-        "skinned-mesh-renderer": { "modules": ["skinned-mesh-renderer"] },
+        "skinned-mesh-renderer": { "modules": ["skinned-mesh-renderer"] }
     },
     "moduleOverrides": [{
             "test": "true",
